@@ -1,10 +1,10 @@
 CXX = g++
 
-CXXFLAGS = -Wall -Wextra -O2 -std=c++17
+CXXFLAGS = -Wall -Wextra -O2 -std=c++20
 
 TARGET = sikradio 
 
-SRCS = sikradio.cpp client_config.cpp
+SRCS = sikradio.cpp client_config.cpp url_parser.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 
