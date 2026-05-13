@@ -23,17 +23,51 @@ std::string build_http_request(const ParsedURL& parsed_url, const ClientConfig& 
     return request;
 }
 
-void send_http_request(const int socket_fd, const ParsedURL& parsed_url, const ClientConfig& config, const std::string& current_cookie) {
+void send_http_request(IStream& stream, const ParsedURL& parsed_url, const ClientConfig& config, const std::string& current_cookie) {
     std::string request = build_http_request(parsed_url, config, current_cookie);
 
-    ssize_t const bytes_written = write(socket_fd, request.data(), request.length());
+    ssize_t const bytes_written = stream.write(request.data(), request.length());
 
     if (bytes_written < 0 || static_cast<size_t>(bytes_written) != request.length()) {
-        throw std::runtime_error("failed to write HTTP request to socket");
+        throw std::runtime_error("failed to write request to socket");
     }
 
     // TODO: wypisywanie logów w zależności od ustawionego verbosity
 
+}
+
+// wczytuje to co wyslal serwer bit po bicie az do dojscia do \r\n\r\n
+std::optional<std::string> server_response_to_text(IStream& stream) {
+    char c;
+    ssize_t bytes_read = 0;
+
+    std::string received_text;
+
+    while (true) {
+        bytes_read = stream.read(&c, 1);
+
+        if (bytes_read > 0) {
+            // read a letter
+            received_text += c;
+            if (received_text.ends_with("\r\n\r\n")) {
+                break;
+            }
+        } else if (bytes_read == 0) {
+            return std::nullopt;
+        } else {
+            // bytes read < 0 => check errno
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // timeout
+                // TODO: moze dodac tutaj printa, ze timeout
+
+                return std::nullopt;
+            }
+
+            throw std::runtime_error("failed to read the message received from the server.");
+        }
+    }
+
+    return received_text;
 }
 
 std::optional<HttpResponseData> parse_http_response(const std::string &headers_text) {

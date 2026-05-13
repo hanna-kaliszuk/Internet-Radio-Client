@@ -33,11 +33,11 @@ int main(int argc, char* argv[]) {
 
             // TODO: wypisywanie w zależności od verbosity
 
-            int socket_fd = connect_to_server(parsed_url, config);
+            std::unique_ptr<IStream> stream = connect_to_server(parsed_url, config);
 
             // TODO: wypisywanie w zależności od verbosity
 
-            send_http_request(socket_fd, parsed_url, config, current_cookie);
+            send_http_request(*stream, parsed_url, config, current_cookie);
 
             break; // TODO: zmień tego breaka na warunek wyjścia
         }

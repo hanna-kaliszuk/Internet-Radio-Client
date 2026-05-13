@@ -14,8 +14,8 @@ struct HttpResponseData {
 
 std::string build_http_request(const ParsedURL& parsed_url, const ClientConfig& config, const std::string& current_cookie = "");
 
-void send_http_request(const int socket_fd, const ParsedURL& parsed_url, const ClientConfig& config, const std::string current_cookie = "");
+void send_http_request(IStream& stream, const ParsedURL& parsed_url, const ClientConfig& config, const std::string current_cookie = "");
 
-std::optional<std::string> server_response_to_text();
+std::optional<std::string> server_response_to_text(IStream& stream);
 
 std::optional<HttpResponseData> parse_http_response(const std::string& headers_text);

@@ -81,12 +81,12 @@ static void configure_socket_timeout(const int socket_fd, const uint32_t timeout
     }
 }
 
-int connect_to_server(const ParsedURL& parsed_url, const ClientConfig& config) {
+std::unique_ptr<IStream> connect_to_server(const ParsedURL& parsed_url, const ClientConfig& config) {
     AddrInfoPtr const resolved_address = resolve_hostname(parsed_url, config);
 
     int const socket_fd = connect_to_the_first_working_address(resolved_address.get());
 
     configure_socket_timeout(socket_fd, config.timeout);
 
-    return socket_fd;
+    return std::make_unique<TcpStream>(socket_fd);
 }
