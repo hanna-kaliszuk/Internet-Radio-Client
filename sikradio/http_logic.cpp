@@ -1,8 +1,48 @@
 #include "http_logic.h"
 
+#include <algorithm>
 #include <unistd.h>
 #include <iostream>
 #include <sstream>
+
+static void handle_200_ok(std::istringstream& stream, HttpResponseData& response) {
+    std::string current_line;
+
+    while (std::getline(stream, current_line)) {
+        if (!current_line.empty() && current_line.back() == '\r') {
+            // delete '\r'
+            current_line.pop_back();
+        }
+
+        if (current_line.empty()) {
+            // end of the text
+            break;
+        }
+
+        size_t colon_pos = current_line.find(':');
+        if (colon_pos == std::string::npos) {
+            // malformed header (according to the http standard)
+            continue;
+        }
+
+        std::string key = current_line.substr(0, colon_pos);
+        std::string value = current_line.substr(colon_pos + 1);
+
+        // case insensivity on the key
+        std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+
+        if (key == "icy-metaint") {
+            std::istringstream value_stream(value);
+
+            if (!(value_stream >> response.icy_metaint)) {
+                // if the data doesnt make sense, leave it unchanged (default = 0)
+            }
+        }
+
+    }
+}
+
+static void handle_redirect(std::istringstream& stream, HttpResponseData& response) {};
 
 std::string build_http_request(const ParsedURL& parsed_url, const ClientConfig& config, const std::string& current_cookie) {
     std::string request = "GET " + parsed_url.path + " HTTP/1.1\r\n";
@@ -70,7 +110,7 @@ std::optional<std::string> server_response_to_text(IStream& stream) {
     return received_text;
 }
 
-std::optional<HttpResponseData> parse_http_response(const std::string &headers_text) {
+std::optional<HttpResponseData> process_http_response(const std::string &headers_text) {
     if (headers_text.empty()) {
         // no response from the server
         return std::nullopt;
@@ -97,4 +137,18 @@ std::optional<HttpResponseData> parse_http_response(const std::string &headers_t
     }
 
     // TODO: do oddelegowania do mniejszych funkcji w zaleznosci od tego jaki jest kod
+    switch (response.status_code) {
+        case 200:
+            handle_200_ok(main_stream, response);
+            break;
+        case 301:
+        case 302:
+            handle_redirect(main_stream, response);
+            break;
+        default:
+            response.critical_error = true;
+            break;
+    }
+
+    return response;
 }
