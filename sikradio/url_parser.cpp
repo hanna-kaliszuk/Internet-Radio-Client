@@ -34,6 +34,11 @@ std::optional<ParsedURL> parseUrl(const std::string& url) {
         host_buffer = url.substr(offset);
     }
 
+    size_t const hash_position = result.path.find('#');
+    if (hash_position != std::string::npos) {
+        result.path = result.path.substr(0, hash_position);
+    }
+
     // check if there is a unusual port specified (number after the last ':')
     size_t const colon_position = host_buffer.rfind(':');
     size_t const bracket_position = host_buffer.rfind(']');
