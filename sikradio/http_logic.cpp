@@ -31,6 +31,6 @@ void send_http_request(const int socket_fd, const ParsedURL& parsed_url, const C
         throw std::runtime_error("failed to write HTTP request to socket");
     }
 
-    // TODO: wypisywanie logów w zależnośc
+    // TODO: wypisywanie logów w zależności od
 
 }
