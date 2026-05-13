@@ -62,5 +62,5 @@ std::optional<HttpResponseData> parse_http_response(const std::string &headers_t
         return std::nullopt;
     }
 
-    // TODO: do oddelegowania do mniejszych funkcji w zaleznosci od tego jaki
+    // TODO: do oddelegowania do mniejszych funkcji w zaleznosci od tego jaki je
 }
