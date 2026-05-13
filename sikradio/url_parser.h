@@ -25,5 +25,6 @@ struct ParsedURL {
     std::string path;
 };
 
+// Divides URL into parts: protocol, host
 std::optional<ParsedURL> parseUrl(const std::string& url);
 

@@ -56,14 +56,14 @@ ClientConfig parse_arguments(int argc, char* argv[]) {
                 if (seen_4) throw std::invalid_argument("parameter '-4' provided multiple times");
 
                 seen_4 = true; 
-                config.force_ip4 = true; 
+                config.force_ipv4 = true;
                 break;
 
             case '6':
                 if (seen_6) throw std::invalid_argument("parameter '-6' provided multiple times");
 
                 seen_6 = true; 
-                config.force_ip6 = true; 
+                config.force_ipv6 = true;
                 break;
 
             case 'v':
@@ -110,9 +110,9 @@ ClientConfig parse_arguments(int argc, char* argv[]) {
     }
 
     // if both -4 and -6 are provided (or neither), let getaddrinfo decide
-    if (config.force_ip4 && config.force_ip6) {
-        config.force_ip4 = false;
-        config.force_ip6 = false; 
+    if (config.force_ipv4 && config.force_ipv6) {
+        config.force_ipv4 = false;
+        config.force_ipv6 = false;
     }
 
     return config;
