@@ -42,7 +42,47 @@ static void handle_200_ok(std::istringstream& stream, HttpResponseData& response
     }
 }
 
-static void handle_redirect(std::istringstream& stream, HttpResponseData& response) {};
+static void handle_redirect(std::istringstream& stream, HttpResponseData& response) {
+    std::string current_line;
+
+    while (std::getline(stream, current_line)) {
+        if (!current_line.empty() && current_line.back() == '\r') {
+            current_line.pop_back();
+        }
+
+        if (current_line.empty()) {
+            break;
+        }
+
+        size_t colon_pos = current_line.find(':');
+        if (colon_pos == std::string::npos) {
+            // malformed header (according to the http standard)
+            continue;
+        }
+
+        std::string key = current_line.substr(0, colon_pos);
+        std::string value = current_line.substr(colon_pos + 1);
+
+        // case insensivity on the key
+        std::transform(key.begin(), key.end(), key.begin(), ::tolower);
+
+        if (key == "location") {
+            const size_t first_non_space = value.find_first_not_of(' ');
+            if (first_non_space != std::string::npos) {
+                response.new_location = value.substr(first_non_space);
+            }
+        } else if (key == "set-cookie") {
+            const size_t first_non_space = value.find_first_not_of(' ');
+            const size_t semicolon_pos = value.find_first_of(';');
+
+            if (semicolon_pos == std::string::npos) {
+                response.cookie = value.substr(first_non_space);
+            } else {
+                response.cookie = value.substr(first_non_space, semicolon_pos - first_non_space);
+            }
+        }
+    }
+}
 
 std::string build_http_request(const ParsedURL& parsed_url, const ClientConfig& config, const std::string& current_cookie) {
     std::string request = "GET " + parsed_url.path + " HTTP/1.1\r\n";
@@ -136,7 +176,6 @@ std::optional<HttpResponseData> process_http_response(const std::string &headers
         return std::nullopt;
     }
 
-    // TODO: do oddelegowania do mniejszych funkcji w zaleznosci od tego jaki jest kod
     switch (response.status_code) {
         case 200:
             handle_200_ok(main_stream, response);
