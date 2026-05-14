@@ -6,19 +6,34 @@
 #include <iostream>
 #include <thread>
 
+static void listen_to_music(IStream& stream) {
+    char buffer[4096];
+
+    while (true) {
+        ssize_t bytes_read = stream.read(buffer, 4096);
+
+        if (bytes_read < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // timeout
+                // TODO: moze wypisac ze timeout
+                break;
+            }
+
+            throw std::runtime_error("audio read error");
+        }
+
+        if (bytes_read == 0) {
+            throw ConnectionClosedException();
+        }
+
+        std::cout.write(buffer, bytes_read);
+
+    }
+}
+
 int main(int argc, char* argv[]) {
     try {
         ClientConfig config = parse_arguments(argc, argv);
-
-        // TODO: usuń to potem
-        std::cout << "--- WCZYTANA KONFIGURACJA ---\n";
-        std::cout << "URL serwera: " << config.server_url << "\n";
-        std::cout << "Wymuś IPv4:  " << (config.force_ipv4 ? "TAK" : "NIE") << "\n";
-        std::cout << "Wymuś IPv6:  " << (config.force_ipv6 ? "TAK" : "NIE") << "\n";
-        std::cout << "Metadane:    " << (config.request_metadata ? "TAK" : "NIE") << "\n";
-        std::cout << "Timeout:     " << config.timeout << " ms\n";
-        std::cout << "Verbosity:   " << config.verbosity << "\n";
-        std::cout << "-----------------------------\n";
 
         std::string current_url = config.server_url;
         std::string current_cookie = "";
@@ -73,28 +88,7 @@ int main(int argc, char* argv[]) {
             }
 
             if (response_data.status_code == 200) {
-                char buffer[4096];
-
-                while (true) {
-                    ssize_t bytes_read = stream->read(buffer, 4096);
-
-                    if (bytes_read < 0) {
-                        if (errno == EAGAIN || errno == EWOULDBLOCK) {
-                            // timeout
-                            // TODO: moze wypisac ze timeout
-                            break;
-                        }
-
-                        throw std::runtime_error("audio read error");
-                    }
-
-                    if (bytes_read == 0) {
-                        throw ConnectionClosedException();
-                    }
-
-                    std::cout.write(buffer, bytes_read);
-
-                }
+                listen_to_music(*stream);
             } else {
                 // TODO: zmien to
                 throw std::runtime_error("temporary error. FIX IT");
