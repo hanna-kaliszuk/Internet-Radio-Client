@@ -117,7 +117,14 @@ static void listen_to_music(IStream& stream, std::atomic<bool>& is_running, cons
     handle_metadata(stream, is_running, metaint);
 }
 
+static void initialize_open_ssl() {
+    SSL_library_init();
+    SSL_load_error_strings();
+    OpenSSL_add_all_algorithms();
+}
+
 int main(int argc, char* argv[]) {
+    initialize_open_ssl();
     std::atomic<bool> is_running{true};
 
     std::thread input_thread([&is_running]() {
