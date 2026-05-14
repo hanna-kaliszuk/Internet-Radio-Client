@@ -103,7 +103,7 @@ std::string build_http_request(const ParsedURL& parsed_url, const ClientConfig& 
     return request;
 }
 
-void send_http_request(IStream& stream, const ParsedURL& parsed_url, const ClientConfig& config, const std::string& current_cookie) {
+void send_http_request(IStream& stream, const ParsedURL& parsed_url, const ClientConfig& config, const std::string current_cookie){
     std::string request = build_http_request(parsed_url, config, current_cookie);
 
     ssize_t const bytes_written = stream.write(request.data(), request.length());
@@ -133,7 +133,7 @@ std::optional<std::string> server_response_to_text(IStream& stream) {
                 break;
             }
         } else if (bytes_read == 0) {
-            return std::nullopt;
+            throw ConnectionClosedException();
         } else {
             // bytes read < 0 => check errno
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
