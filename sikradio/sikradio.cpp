@@ -4,6 +4,7 @@
 #include "url_parser.h"
 
 #include <iostream>
+#include <thread>
 
 int main(int argc, char* argv[]) {
     try {
@@ -23,6 +24,18 @@ int main(int argc, char* argv[]) {
         std::string current_cookie = "";
 
         std::unique_ptr<IStream> stream;
+
+        std::thread input_thread([]() {
+            std::string line;
+            // read from the terminal
+            while (std::getline(std::cin, line)) {
+                if (line == "quit") {
+                    std::exit(0);
+                }
+            }
+        });
+
+        input_thread.detach();
 
         while (true) {
             auto parsed_opt = parseUrl(current_url);
