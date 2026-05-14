@@ -42,3 +42,8 @@ public:
         }
     }
 };
+
+enum class StreamState {
+    AUDIO,
+    MULTIPLIER, METADATA
+};

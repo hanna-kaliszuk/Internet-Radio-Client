@@ -9,10 +9,10 @@
 #include <poll.h>
 #include <unistd.h>
 
-static void listen_to_music(IStream& stream, std::atomic<bool>& is_running) {
-    char buffer[4096];
-
+static void handle_no_metadata(IStream& stream, std::atomic<bool>& is_running) {
     while (is_running) {
+        char buffer[4096];
+
         ssize_t bytes_read = stream.read(buffer, 4096);
 
         if (bytes_read < 0) {
@@ -30,8 +30,90 @@ static void listen_to_music(IStream& stream, std::atomic<bool>& is_running) {
         }
 
         std::cout.write(buffer, bytes_read);
+    }
+}
+
+static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, const size_t metaint) {
+    char buffer[4096];
+
+    StreamState state = StreamState::AUDIO;
+    size_t bytes_to_read = metaint; // starting with the audio data
+    std::string metadata_buffer;
+
+    while (is_running) {
+        // read only as many bytes as needed for this specific state
+        size_t chunk_size = std::min(sizeof(buffer), bytes_to_read);
+        ssize_t bytes_read = stream.read(buffer, chunk_size);
+
+        if (bytes_read < 0) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK) break; // timeout -> reconnect
+            throw std::runtime_error("audio read error");
+        }
+        if (bytes_read == 0) {
+            throw ConnectionClosedException();
+        }
+
+        bytes_to_read -= bytes_read;
+
+        switch (state) {
+            case StreamState::AUDIO:
+                std::cout.write(buffer, bytes_read);
+
+                if (bytes_to_read == 0) {
+                    state = StreamState::MULTIPLIER;
+                    bytes_to_read = 1;
+                }
+                break;
+
+            case StreamState::MULTIPLIER:
+                unsigned char k = static_cast<unsigned char>(buffer[0]);
+                size_t metadata_length = k * 16;
+
+                if (metadata_length == 0) {
+                    state = StreamState::AUDIO;
+                    bytes_to_read = metaint;
+                } else {
+                    state = StreamState::METADATA;
+                    bytes_to_read = metadata_length;
+                    metadata_buffer.clear();
+                }
+
+                break;
+
+            case StreamState::METADATA:
+                metadata_buffer.append(buffer, bytes_to_read);
+
+                if (bytes_to_read == 0) {
+                    // remove additional '\0' that might have been added
+                    std::string clean_meta;
+                    for (char c : metadata_buffer) {
+                        if (c != '\0') {
+                            clean_meta += c;
+                        }
+                    }
+
+                    if (!clean_meta.empty()) {
+                        std::cerr << clean_meta << "\n";
+                    }
+
+                    // go back to listening to music
+                    state = StreamState::AUDIO;
+                    bytes_to_read = metaint;
+                }
+
+                break;
+        }
 
     }
+}
+
+static void listen_to_music(IStream& stream, std::atomic<bool>& is_running, const size_t metaint) {
+    if (metaint == 0) {
+        handle_no_metadata(stream, is_running);
+        return;
+    }
+
+    handle_metadata(stream, is_running, metaint);
 }
 
 int main(int argc, char* argv[]) {
