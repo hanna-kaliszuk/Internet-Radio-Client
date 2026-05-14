@@ -4,12 +4,15 @@
 #include "url_parser.h"
 
 #include <iostream>
+#include <atomic>
 #include <thread>
+#include <poll.h>
+#include <unistd.h>
 
-static void listen_to_music(IStream& stream) {
+static void listen_to_music(IStream& stream, std::atomic<bool>& is_running) {
     char buffer[4096];
 
-    while (true) {
+    while (is_running) {
         ssize_t bytes_read = stream.read(buffer, 4096);
 
         if (bytes_read < 0) {
@@ -32,6 +35,38 @@ static void listen_to_music(IStream& stream) {
 }
 
 int main(int argc, char* argv[]) {
+    std::atomic<bool> is_running{true};
+
+    std::thread input_thread([&is_running]() {
+            struct pollfd pfd;
+            pfd.fd = STDIN_FILENO; // listen to the standard input
+            pfd.events = POLLIN; // incoming data
+
+            std::string buffer;
+
+            while (is_running) {
+                // check if there is a char. if not, stop waiting after 100ms and check the flag
+                int ret = poll(&pfd, 1, 100);
+
+                if (ret > 0 && (pfd.revents & POLLIN)) {
+                    char c;
+                    // read one bit
+                    if (read(STDIN_FILENO, &c, 1) > 0) {
+                        if (c == '\n') {
+                            if (buffer == "quit") {
+                                is_running = false; // start quitting
+                            }
+                            buffer.clear();
+                        } else {
+                            buffer += c;
+                        }
+                    }
+                }
+            }
+        });
+
+    int exit_code = EXIT_SUCCESS;
+
     try {
         ClientConfig config = parse_arguments(argc, argv);
 
@@ -40,19 +75,7 @@ int main(int argc, char* argv[]) {
 
         std::unique_ptr<IStream> stream;
 
-        std::thread input_thread([]() {
-            std::string line;
-            // read from the terminal
-            while (std::getline(std::cin, line)) {
-                if (line == "quit") {
-                    std::exit(0);
-                }
-            }
-        });
-
-        input_thread.detach();
-
-        while (true) {
+        while (is_running) {
             auto parsed_opt = parseUrl(current_url);
 
             if (!parsed_opt.has_value()) {
@@ -84,14 +107,29 @@ int main(int argc, char* argv[]) {
 
             const HttpResponseData response_data = response_opt.value();
             if (response_data.critical_error) {
-                throw std::runtime_error("critical error");
+                throw std::runtime_error("critical error " +  std::to_string(response_data.status_code));
             }
 
             if (response_data.status_code == 200) {
-                listen_to_music(*stream);
+                listen_to_music(*stream, is_running);
+            } else if (response_data.status_code == 301 || response_data.status_code == 302) {
+                // redirect
+                if (response_data.new_location.empty()) {
+                    throw std::runtime_error("client redirected to nonexistent location");
+                }
+
+                current_url = response_data.new_location;
+                if (!response_data.cookie.empty()) {
+                    current_cookie = response_data.cookie;
+                }
+
+                // TODO: wypisanie odpowiednich logów
+
+                // go back to connecting again
+                continue;
             } else {
                 // TODO: zmien to
-                throw std::runtime_error("temporary error. FIX IT");
+                throw std::runtime_error("unsuported status code " + std::to_string(response_data.status_code));
             }
         }
 
@@ -99,11 +137,19 @@ int main(int argc, char* argv[]) {
     } catch (const ConnectionClosedException& e) {
         // server closed the connection
         // TODO: wypisz wszystkie odebrane do tej pory dane
-        return EXIT_SUCCESS;
+        is_running = false;
+        exit_code = EXIT_SUCCESS;
     } catch (const std::exception& e) {
+        is_running = false;
         std::cerr << "ERROR: " << e.what() << std::endl;
-        return EXIT_FAILURE;
+        exit_code = EXIT_FAILURE;
     }
 
-    return EXIT_SUCCESS;
+    is_running = false;
+    if (input_thread.joinable()) {
+        // wait for the thread to finish
+        input_thread.join();
+    }
+
+    return exit_code;
 }
