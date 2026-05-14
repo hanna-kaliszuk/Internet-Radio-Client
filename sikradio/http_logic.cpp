@@ -32,10 +32,10 @@ static void handle_200_ok(std::istringstream& stream, HttpResponseData& response
         std::transform(key.begin(), key.end(), key.begin(), ::tolower);
 
         if (key == "icy-metaint") {
-            std::istringstream value_stream(value);
-
-            if (!(value_stream >> response.icy_metaint)) {
-                // if the data doesnt make sense, leave it unchanged (default = 0)
+            try {
+                response.icy_metaint = std::stoull(value);
+            } catch (...) {
+                response.icy_metaint = 0;
             }
         }
 

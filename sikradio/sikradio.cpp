@@ -65,7 +65,7 @@ static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, cons
                 }
                 break;
 
-            case StreamState::MULTIPLIER:
+            case StreamState::MULTIPLIER: {
                 unsigned char k = static_cast<unsigned char>(buffer[0]);
                 size_t metadata_length = k * 16;
 
@@ -79,9 +79,10 @@ static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, cons
                 }
 
                 break;
+            }
 
             case StreamState::METADATA:
-                metadata_buffer.append(buffer, bytes_to_read);
+                metadata_buffer.append(buffer, bytes_read);
 
                 if (bytes_to_read == 0) {
                     // remove additional '\0' that might have been added
@@ -193,7 +194,7 @@ int main(int argc, char* argv[]) {
             }
 
             if (response_data.status_code == 200) {
-                listen_to_music(*stream, is_running);
+                listen_to_music(*stream, is_running, response_data.icy_metaint);
             } else if (response_data.status_code == 301 || response_data.status_code == 302) {
                 // redirect
                 if (response_data.new_location.empty()) {
