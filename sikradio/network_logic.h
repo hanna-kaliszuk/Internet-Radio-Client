@@ -4,7 +4,7 @@
 #include "url_parser.h"
 
 #include <memory>
-#include "connection_stream.h"
+#include "IStream.h"
 
 /**
  * @brief Coordinates the process of connecting to the server:

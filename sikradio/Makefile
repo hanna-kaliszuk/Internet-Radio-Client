@@ -5,7 +5,7 @@ LDFLAGS = -lssl -lcrypto
 
 TARGET = sikradio 
 
-SRCS = sikradio.cpp client_config.cpp url_parser.cpp network_logic.cpp http_logic.cpp
+SRCS = sikradio.cpp client_config.cpp url_parser.cpp network_logic.cpp http_logic.cpp tcp_stream.cpp tls_stream.cpp
 
 OBJS = $(SRCS:.cpp=.o)
 

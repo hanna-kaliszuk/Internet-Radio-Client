@@ -1,4 +1,7 @@
 #include "network_logic.h"
+#include "tcp_stream.h"
+#include "tls_stream.h"
+#include "IStream.h"
 
 #include <sys/socket.h>
 #include <netdb.h>
@@ -88,5 +91,9 @@ std::unique_ptr<IStream> connect_to_server(const ParsedURL& parsed_url, const Cl
 
     configure_socket_timeout(socket_fd, config.timeout);
 
-    return std::make_unique<TcpStream>(socket_fd);
+    if (parsed_url.protocol == Protocol::HTTPS) {
+        return std::make_unique<TlsStream>(socket_fd, parsed_url.hostname);
+    } else {
+        return std::make_unique<TcpStream>(socket_fd);
+    }
 }

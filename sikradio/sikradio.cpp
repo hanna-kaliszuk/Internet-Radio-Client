@@ -2,12 +2,15 @@
 #include "http_logic.h"
 #include "network_logic.h"
 #include "url_parser.h"
+#include "IStream.h"
 
 #include <iostream>
 #include <atomic>
 #include <thread>
 #include <poll.h>
 #include <unistd.h>
+#include <openssl/ssl.h>
+#include <openssl/err.h>
 
 static void handle_no_metadata(IStream& stream, std::atomic<bool>& is_running) {
     while (is_running) {
