@@ -75,6 +75,11 @@ static void handle_redirect(std::istringstream& stream, HttpResponseData& respon
             const size_t first_non_space = value.find_first_not_of(' ');
             const size_t semicolon_pos = value.find_first_of(';');
 
+            if (first_non_space == std::string::npos) {
+                // no cookies fou
+                break;
+            }
+
             if (semicolon_pos == std::string::npos) {
                 response.cookie = value.substr(first_non_space);
             } else {
