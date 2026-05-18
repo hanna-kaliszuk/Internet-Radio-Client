@@ -78,7 +78,7 @@ static void configure_socket_timeout(const int socket_fd, const uint32_t timeout
     tv.tv_sec = timeout / 1000;
     tv.tv_usec = (timeout % 1000) * 1000;
 
-    if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, (char*)&tv, sizeof(tv)) == -1) {
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, reinterpret_cast<const char *>(&tv), sizeof(tv)) == -1) {
         close(socket_fd);
         throw std::runtime_error(std::string("failed to set socket receive timeout"));
     }

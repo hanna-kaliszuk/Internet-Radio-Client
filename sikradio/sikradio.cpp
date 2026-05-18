@@ -11,6 +11,7 @@
 #include <unistd.h>
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+#include <sys/socket.h>
 
 static void handle_no_metadata(IStream& stream, std::atomic<bool>& is_running) {
     while (is_running) {
@@ -56,7 +57,7 @@ static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, cons
             throw ConnectionClosedException();
         }
 
-        bytes_to_read -= bytes_read;
+        bytes_to_read -= static_cast<size_t>(bytes_read);
 
         switch (state) {
             case StreamState::AUDIO:
@@ -85,7 +86,7 @@ static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, cons
             }
 
             case StreamState::METADATA:
-                metadata_buffer.append(buffer, bytes_read);
+                metadata_buffer.append(buffer, static_cast<size_t>(bytes_read));
 
                 if (bytes_to_read == 0) {
                     // remove additional '\0' that might have been added
@@ -129,8 +130,9 @@ static void initialize_open_ssl() {
 int main(int argc, char* argv[]) {
     initialize_open_ssl();
     std::atomic<bool> is_running{true};
+    std::atomic<int> active_socket_fd{-1};
 
-    std::thread input_thread([&is_running]() {
+    std::thread input_thread([&is_running, &active_socket_fd]() {
             struct pollfd pfd;
             pfd.fd = STDIN_FILENO; // listen to the standard input
             pfd.events = POLLIN; // incoming data
@@ -148,6 +150,11 @@ int main(int argc, char* argv[]) {
                         if (c == '\n') {
                             if (buffer == "quit") {
                                 is_running = false; // start quitting
+
+                                int fd = active_socket_fd.load();
+                                if (fd != -1) {
+                                    shutdown(fd, SHUT_RDWR);
+                                }
                             }
                             buffer.clear();
                         } else {
@@ -181,6 +188,8 @@ int main(int argc, char* argv[]) {
 
             stream = connect_to_server(parsed_url, config);
 
+            active_socket_fd = stream->get_fd();
+
             // TODO: wypisywanie w zależności od verbosity
 
             send_http_request(*stream, parsed_url, config, current_cookie);
@@ -193,7 +202,7 @@ int main(int argc, char* argv[]) {
 
             const std::string server_response_text = text_opt.value();
 
-            auto response_opt = process_http_response(*text_opt);
+            auto response_opt = process_http_response(server_response_text);
             if (!response_opt.has_value()) {
                 throw std::runtime_error("invalid response");
             }

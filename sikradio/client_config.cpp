@@ -5,7 +5,6 @@
 #include <string_view>
 #include <unistd.h>
 
-
 // helper fo print usage instructions.
 static void print_usage(const std::string_view prog_name) {
     std::cerr << "usage: " << prog_name << " -u <URL> [-4] [-6] [-t <timeout>] [-m] [-v <level>] [-q]\n";

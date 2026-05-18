@@ -1,6 +1,6 @@
 CXX = g++
 
-CXXFLAGS = -Wall -Wextra -O2 -std=c++20
+CXXFLAGS = -Wall -Wextra -Wconversion -Werror -Wsign-conversion -O2 -std=c++20
 LDFLAGS = -lssl -lcrypto
 
 TARGET = sikradio 

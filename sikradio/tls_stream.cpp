@@ -40,18 +40,27 @@ TlsStream::~TlsStream() {
 ssize_t TlsStream::read(void* buffer, size_t count) {
     if (!ssl) return -1;
 
-    return SSL_read(ssl, buffer, count);
+    int const n = SSL_read(ssl, buffer, static_cast<int>(count));
+
+    return static_cast<ssize_t>(n);
 }
 
 ssize_t TlsStream::write(const void* buffer, size_t count) {
     if (!ssl) return -1;
 
-    return SSL_write(ssl, buffer, count);
+    int const n = SSL_write(ssl, buffer, static_cast<int>(count));
+
+    return static_cast<ssize_t>(n);
 }
 
 void TlsStream::close() {
     if (ssl) {
-        SSL_shutdown(ssl);
+        int result = SSL_shutdown(ssl);
+
+        if (result == 0) {
+            SSL_shutdown(ssl);
+        }
+
         SSL_free(ssl);
         ssl = nullptr;
     }
