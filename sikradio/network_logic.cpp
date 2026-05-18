@@ -8,13 +8,54 @@
 #include <iostream>
 #include <memory>
 
+#include <chrono>
+#include <iomanip>
+#include <sstream>
+#include <arpa/inet.h> 
+
 using AddrInfoPtr = std::unique_ptr<struct addrinfo, decltype(&freeaddrinfo)>;
+
+static std::string get_current_timestamp() {
+    auto now = std::chrono::system_clock::now();
+    std::time_t now_time = std::chrono::system_clock::to_time_t(now);
+    std::tm* local_time = std::localtime(&now_time);
+
+    std::ostringstream oss;
+    // format: YYYY.MM.DD HH.MM.SS
+    oss << std::put_time(local_time, "%Y.%m.%d %H.%M.%S");
+    return oss.str();
+}
+
+static void log_connection_attempt(const struct addrinfo* rp) {
+    char ip_str[INET6_ADDRSTRLEN] = {0};
+    uint16_t port = 0;
+
+    if (rp->ai_family == AF_INET) {
+        auto* ipv4 = reinterpret_cast<struct sockaddr_in*>(rp->ai_addr);
+        inet_ntop(AF_INET, &(ipv4->sin_addr), ip_str, sizeof(ip_str));
+        port = ntohs(ipv4->sin_port);
+        
+        // format ipv4
+        std::cerr << "connecting to server " << ip_str << ":" << port << "\n";
+        
+    } else if (rp->ai_family == AF_INET6) {
+        auto* ipv6 = reinterpret_cast<struct sockaddr_in6*>(rp->ai_addr);
+        inet_ntop(AF_INET6, &(ipv6->sin6_addr), ip_str, sizeof(ip_str));
+        port = ntohs(ipv6->sin6_port);
+        
+        // format ipv6
+        std::cerr << "connecting to server [" << ip_str << "]:" << port << "\n";
+    }
+}
 
 /**
  * @brief Resolves the hostname into a list of available IP addresses. If provided, takes into account configuration
  * preferences (IPv4 / IPv6) and returns a smart pointer managing memory allocated by getaddrinfo.
  */
 static AddrInfoPtr resolve_hostname(const ParsedURL& parsed_url, const ClientConfig& config) {
+    std::cerr << get_current_timestamp() << "\n";
+    std::cerr << "resolving name " << parsed_url.hostname << std::endl;
+
     struct addrinfo hints = {};
     hints.ai_socktype = SOCK_STREAM;
     hints.ai_protocol = IPPROTO_TCP;
@@ -47,6 +88,8 @@ static AddrInfoPtr resolve_hostname(const ParsedURL& parsed_url, const ClientCon
 static int connect_to_the_first_working_address(const struct addrinfo* addresses) {
     int socket_fd = -1;
     for (auto rp = addresses; rp != nullptr; rp = rp->ai_next) {
+        log_connection_attempt(addresses);
+
         socket_fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 
         if (socket_fd == -1) {

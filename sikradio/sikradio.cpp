@@ -39,7 +39,7 @@ static void handle_no_metadata(IStream& stream, std::atomic<bool>& is_running, c
     }
 }
 
-static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, const size_t metaint) {
+static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, const size_t metaint, const int verbosity) {
     char buffer[4096];
 
     StreamState state = StreamState::AUDIO;
@@ -52,7 +52,13 @@ static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, cons
         ssize_t bytes_read = stream.read(buffer, chunk_size);
 
         if (bytes_read < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) break; // timeout -> reconnect
+            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+                // tiemout
+                if (verbosity > 0) {
+                    std::cerr<<"timeout. trying to connect again."<<std::endl;
+                }
+                break;
+            }
             throw std::runtime_error("audio read error");
         }
         if (bytes_read == 0) {
@@ -120,7 +126,7 @@ static void listen_to_music(IStream& stream, std::atomic<bool>& is_running, cons
         return;
     }
 
-    handle_metadata(stream, is_running, metaint);
+    handle_metadata(stream, is_running, metaint, verbosity);
 }
 
 static void initialize_open_ssl() {
@@ -180,11 +186,7 @@ int main(int argc, char* argv[]) {
 
             ParsedURL const parsed_url = parsed_opt.value();
 
-            // TODO: wypisywanie w zależności od verbosity
-
             stream = connect_to_server(parsed_url, config);
-
-            // TODO: wypisywanie w zależności od verbosity
 
             send_http_request(*stream, parsed_url, config, current_cookie);
 
