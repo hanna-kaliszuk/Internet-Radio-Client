@@ -13,7 +13,7 @@
 #include <openssl/err.h>
 #include <sys/socket.h>
 
-static void handle_no_metadata(IStream& stream, std::atomic<bool>& is_running) {
+static void handle_no_metadata(IStream& stream, std::atomic<bool>& is_running, const int verbosity) {
     while (is_running) {
         char buffer[4096];
 
@@ -22,7 +22,9 @@ static void handle_no_metadata(IStream& stream, std::atomic<bool>& is_running) {
         if (bytes_read < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // timeout
-                // TODO: moze wypisac ze timeout
+                if (verbosity > 0) {
+                    std::cerr<<"timeout. trying to connect again."<<std::endl;
+                }
                 break;
             }
 
@@ -112,9 +114,9 @@ static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, cons
     }
 }
 
-static void listen_to_music(IStream& stream, std::atomic<bool>& is_running, const size_t metaint) {
+static void listen_to_music(IStream& stream, std::atomic<bool>& is_running, const size_t metaint, const int verbosity) {
     if (metaint == 0) {
-        handle_no_metadata(stream, is_running);
+        handle_no_metadata(stream, is_running, verbosity);
         return;
     }
 
@@ -130,9 +132,8 @@ static void initialize_open_ssl() {
 int main(int argc, char* argv[]) {
     initialize_open_ssl();
     std::atomic<bool> is_running{true};
-    std::atomic<int> active_socket_fd{-1};
 
-    std::thread input_thread([&is_running, &active_socket_fd]() {
+    std::thread input_thread([&is_running]() {
             struct pollfd pfd;
             pfd.fd = STDIN_FILENO; // listen to the standard input
             pfd.events = POLLIN; // incoming data
@@ -150,11 +151,6 @@ int main(int argc, char* argv[]) {
                         if (c == '\n') {
                             if (buffer == "quit") {
                                 is_running = false; // start quitting
-
-                                int fd = active_socket_fd.load();
-                                if (fd != -1) {
-                                    shutdown(fd, SHUT_RDWR);
-                                }
                             }
                             buffer.clear();
                         } else {
@@ -188,8 +184,6 @@ int main(int argc, char* argv[]) {
 
             stream = connect_to_server(parsed_url, config);
 
-            active_socket_fd = stream->get_fd();
-
             // TODO: wypisywanie w zależności od verbosity
 
             send_http_request(*stream, parsed_url, config, current_cookie);
@@ -213,7 +207,7 @@ int main(int argc, char* argv[]) {
             }
 
             if (response_data.status_code == 200) {
-                listen_to_music(*stream, is_running, response_data.icy_metaint);
+                listen_to_music(*stream, is_running, response_data.icy_metaint, config.verbosity);
             } else if (response_data.status_code == 301 || response_data.status_code == 302) {
                 // redirect
                 if (response_data.new_location.empty()) {
