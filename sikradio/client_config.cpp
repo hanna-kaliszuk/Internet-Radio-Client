@@ -104,7 +104,7 @@ ClientConfig parse_arguments(int argc, char* argv[]) {
 
     if (optind != argc) {
         print_usage(argv[0]);
-        throw std::invalid_argument("unexpect");
+        throw std::invalid_argument("unexpected");
     }
 
     // post parse valildation 
