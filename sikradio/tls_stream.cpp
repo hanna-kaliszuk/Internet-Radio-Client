@@ -3,6 +3,7 @@
 #include <stdexcept>
 #include <unistd.h>
 #include <iostream>
+#include <cerrno>
 
 TlsStream::TlsStream(int fd, const std::string& hostname) : socket_fd(fd), ctx(nullptr), ssl(nullptr) {
     // tsl method for client
