@@ -123,37 +123,41 @@ void send_http_request(IStream& stream, const ParsedURL& parsed_url, const Clien
 }
 
 // wczytuje to co wyslal serwer bit po bicie az do dojscia do \r\n\r\n
-std::optional<std::string> server_response_to_text(IStream& stream, const int verbosity) {
+HeaderReadResult server_response_to_text(IStream& stream, const int verbosity) {
+    static constexpr size_t MAX_HEADERS_SIZE = 64 * 1024; // zeby czytanie kiedys sie zatrzymalo jakby byl zlosliwy serwer
+
     char c;
-    ssize_t bytes_read = 0;
 
     std::string received_text;
 
     while (true) {
-        bytes_read = stream.read(&c, 1);
+        ssize_t bytes_read = stream.read(&c, 1);
 
         if (bytes_read > 0) {
             // read a letter
             received_text += c;
+
+            if (received_text.size() > MAX_HEADERS_SIZE) {
+                throw std::runtime_error("HTTP headers too large");
+            }
+
             if (received_text.ends_with("\r\n\r\n")) {
-                break;
+                return HeaderReadResult{StreamResult::OK, received_text};
             }
         } else if (bytes_read == 0) {
-            throw ConnectionClosedException();
+            return HeaderReadResult{StreamResult::CLOSED_BY_SERVER, ""};
         } else {
             // bytes read < 0 => check errno
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // timeout
                 log_message(verbosity, VerbosityLevel::NON_CRITICAL, "timeout waiting for server response.");
 
-                return std::nullopt;
+                return HeaderReadResult{StreamResult::TIMEOUT, ""};
             }
 
             throw std::runtime_error("failed to read the message received from the server.");
         }
     }
-
-    return received_text;
 }
 
 std::optional<HttpResponseData> process_http_response(const std::string &headers_text) {

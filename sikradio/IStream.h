@@ -16,3 +16,10 @@ enum class StreamState {
     AUDIO,
     MULTIPLIER, METADATA
 };
+
+enum class StreamResult {
+    OK,
+    TIMEOUT,
+    CLOSED_BY_SERVER,
+    STOPPED_BY_CLIENT
+};
