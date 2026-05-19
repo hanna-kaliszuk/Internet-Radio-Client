@@ -34,22 +34,25 @@ ClientConfig parse_arguments(int argc, char* argv[]) {
                 config.request_metadata = true;
                 break;
 
-            case 't':
+            case 't': {
                 if (seen_t) throw std::invalid_argument("parameter '-t' provided multiple times");
 
                 seen_t = true;
-                try {
-                    long long t = std::stoll(optarg);
+                size_t pos = 0;
+                std::string value = optarg;
+                long long t = std::stoll(value, &pos);
 
-                    // range validation 
-                    if (t < 100 || t > 100000) {
-                        throw std::out_of_range("value for -t must be between 100 and 100000");
-                    }
-                    config.timeout = static_cast<uint32_t>(t);
-                } catch (const std::exception&) {
+                if (pos != value.size()) {
                     throw std::invalid_argument("invalid numeric argument for -t");
                 }
+
+                if (t < 100 || t > 100000) {
+                    throw std::out_of_range("value for -t must be between 100 and 100000");
+                }
+
+                config.timeout = static_cast<uint32_t>(t);
                 break;
+            }
 
             case '4':
                 if (seen_4) throw std::invalid_argument("parameter '-4' provided multiple times");
@@ -65,23 +68,25 @@ ClientConfig parse_arguments(int argc, char* argv[]) {
                 config.force_ipv6 = true;
                 break;
 
-            case 'v':
+            case 'v': {
                 if (seen_v) throw std::invalid_argument("parameter '-v' provided multiple times");
 
                 seen_v = true;
-                try {
-                    int v = std::stoi(optarg);
+                size_t pos = 0;
+                std::string value = optarg;
+                int v = std::stoi(value, &pos);
 
-                    // range validation
-                    if (v < 0 || v > 4) {
-                        throw std::out_of_range("value for -v must be between 0 and 4");
-                    }
-
-                    config.verbosity = v;
-                } catch (const std::exception&) {
+                if (pos != value.size()) {
                     throw std::invalid_argument("invalid numeric argument for -v");
                 }
+
+                if (v < 0 || v > 4) {
+                    throw std::out_of_range("value for -v must be between 0 and 4");
+                }
+
+                config.verbosity = v;
                 break;
+            }
 
             case 'q':
                 if (seen_q)throw std::invalid_argument("parameter '-q' provided multiple times");
@@ -95,6 +100,11 @@ ClientConfig parse_arguments(int argc, char* argv[]) {
                 print_usage(argv[0]);
                 throw std::invalid_argument("unknown parameter provided");
         }
+    }
+
+    if (optind != argc) {
+        print_usage(argv[0]);
+        throw std::invalid_argument("unexpect");
     }
 
     // post parse valildation 
