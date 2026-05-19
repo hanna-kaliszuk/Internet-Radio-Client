@@ -6,6 +6,28 @@
 #include <iostream>
 #include <sstream>
 
+static void write_all(IStream& stream, const char* data, size_t length) {
+    size_t written_total = 0;
+
+    while (written_total < length) {
+        ssize_t written = stream.write(data + written_total, length - written_total);
+
+        if (written < 0) {
+            if (errno == EINTR | errno == EAGAIN || errno == EWOULDBLOCK) {
+                continue;
+            }
+
+            throw std::runtime_error("failed to write request to socket");
+        }
+
+        if (written == 0) {
+            throw std::runtime_error("socket write returned 0");
+        }
+
+        written_total += static_cast<size_t>(written);
+    }
+}
+
 static void handle_200_ok(std::istringstream& stream, HttpResponseData& response) {
     std::string current_line;
 
@@ -112,14 +134,9 @@ std::string build_http_request(const ParsedURL& parsed_url, const ClientConfig& 
 void send_http_request(IStream& stream, const ParsedURL& parsed_url, const ClientConfig& config, const std::string current_cookie){
     std::string request = build_http_request(parsed_url, config, current_cookie);
 
-    ssize_t const bytes_written = stream.write(request.data(), request.length());
-
-    if (bytes_written < 0 || static_cast<size_t>(bytes_written) != request.length()) {
-        throw std::runtime_error("failed to write request to socket");
-    }
+    write_all(stream, request.data(), request.length());
 
     log_message(config.verbosity, VerbosityLevel::COMMON, request);
-
 }
 
 // wczytuje to co wyslal serwer bit po bicie az do dojscia do \r\n\r\n
