@@ -38,19 +38,79 @@ TlsStream::~TlsStream() {
 }
 
 ssize_t TlsStream::read(void* buffer, size_t count) {
-    if (!ssl) return -1;
+    if (!ssl){
+        errno = EBADF;
+        return -1;
+    }
+
+    ERR_clear_error();
 
     int const n = SSL_read(ssl, buffer, static_cast<int>(count));
 
-    return static_cast<ssize_t>(n);
+    if (n > 0) {
+        return static_cast<ssize_t>(n);
+    }
+
+    int err = SSL_get_error(ssl, n);
+
+    switch (err) {
+        case SSL_ERROR_ZERO_RETURN:
+            return 0;
+
+        case SSL_ERROR_WANT_READ:
+        case SSL_ERROR_WANT_WRITE:
+            errno = EAGAIN;
+            return -1;
+
+        case SSL_ERROR_SYSCALL:
+            if (errno == 0) {
+                errno = ECONNRESET;
+            }
+            return -1;
+
+        case SSL_ERROR_SSL:
+        default:
+            errno = EIO;
+            return -1;
+    }
 }
 
 ssize_t TlsStream::write(const void* buffer, size_t count) {
-    if (!ssl) return -1;
+    if (!ssl) {
+        errno = EBADF;
+        return -1;
+    }
 
-    int const n = SSL_write(ssl, buffer, static_cast<int>(count));
+    ERR_clear_error();
 
-    return static_cast<ssize_t>(n);
+    int n = SSL_write(ssl, buffer, static_cast<int>(count));
+
+    if (n > 0) {
+        return static_cast<ssize_t>(n);
+    }
+
+    int err = SSL_get_error(ssl, n);
+
+    switch (err) {
+        case SSL_ERROR_ZERO_RETURN:
+            return 0;
+
+        case SSL_ERROR_WANT_READ:
+        case SSL_ERROR_WANT_WRITE:
+            errno = EAGAIN;
+            return -1;
+
+        case SSL_ERROR_SYSCALL:
+            if (errno == 0) {
+                errno = ECONNRESET;
+            }
+            return -1;
+
+        case SSL_ERROR_SSL:
+        default:
+            errno = EIO;
+            return -1;
+    }
 }
 
 void TlsStream::close() {
