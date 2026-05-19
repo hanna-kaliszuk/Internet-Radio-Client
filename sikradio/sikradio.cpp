@@ -14,35 +14,40 @@
 #include <openssl/err.h>
 #include <sys/socket.h>
 
-
-
-static void handle_no_metadata(IStream& stream, std::atomic<bool>& is_running, const int verbosity) {
+static StreamResult handle_no_metadata(IStream& stream, std::atomic<bool>& is_running, const int verbosity) {
     while (is_running) {
         char buffer[4096];
 
-        ssize_t bytes_read = stream.read(buffer, 4096);
+        ssize_t bytes_read = stream.read(buffer, sizeof(buffer));
 
         if (bytes_read < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // timeout
                 log_message(verbosity, VerbosityLevel::NON_CRITICAL, "timeout: no data received. reconnecting...");
-                break;
+
+                return StreamResult::TIMEOUT;
             }
 
             throw std::runtime_error("audio read error");
         }
 
         if (bytes_read == 0) {
-            throw ConnectionClosedException();
+            return StreamResult::CLOSED_BY_SERVER;
         }
 
         std::cout.write(buffer, bytes_read);
 
+        if (!std::cout) {
+            throw std::runtime_error("failed to write audio to stdout");
+        }
+
         log_message(verbosity, VerbosityLevel::DEBUG,  "####DEBUG#### audio: wrote " + std::to_string(bytes_read) + " bytes");
     }
+
+    return StreamResult::STOPPED_BY_CLIENT;
 }
 
-static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, const size_t metaint, const int verbosity) {
+static StreamResult handle_metadata(IStream& stream, std::atomic<bool>& is_running, const size_t metaint, const int verbosity) {
     char buffer[4096];
 
     StreamState state = StreamState::AUDIO;
@@ -58,13 +63,14 @@ static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, cons
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // tiemout
                 log_message(verbosity, VerbosityLevel::NON_CRITICAL, "timeout: no data received. reconnecting...");
-                break;
+
+                return StreamResult::TIMEOUT;
             }
 
             throw std::runtime_error("audio read error");
         }
         if (bytes_read == 0) {
-            throw ConnectionClosedException();
+            return StreamResult::CLOSED_BY_SERVER;
         }
 
         bytes_to_read -= static_cast<size_t>(bytes_read);
@@ -72,6 +78,10 @@ static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, cons
         switch (state) {
             case StreamState::AUDIO:
                 std::cout.write(buffer, bytes_read);
+
+                if (!std::cout) {
+                    throw std::runtime_error("failed to write auto do stdout");
+                }
 
                 log_message(verbosity, VerbosityLevel::DEBUG,"####DEBUG#### audio: wrote " + std::to_string(bytes_read) + " bytes");
 
@@ -105,6 +115,7 @@ static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, cons
                 if (bytes_to_read == 0) {
                     // remove additional '\0' that might have been added
                     std::string clean_meta;
+
                     for (char c : metadata_buffer) {
                         if (c != '\0') {
                             clean_meta += c;
@@ -124,21 +135,22 @@ static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, cons
 
                 break;
         }
-
     }
+
+    return StreamResult::STOPPED_BY_CLIENT;
 }
 
-static void listen_to_music(IStream& stream, std::atomic<bool>& is_running, const size_t metaint, const int verbosity) {
+static StreamResult listen_to_music(IStream& stream, std::atomic<bool>& is_running, const size_t metaint, const int verbosity) {
     if (metaint == 0) {
         log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### mode: no metadata (raw audio)");
-        handle_no_metadata(stream, is_running, verbosity);
-        return;
+
+        return handle_no_metadata(stream, is_running, verbosity);
     }
 
     log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### mode: metadata interleaved every "
         + std::to_string(metaint) + " bytes");
 
-    handle_metadata(stream, is_running, metaint, verbosity);
+    return handle_metadata(stream, is_running, metaint, verbosity);
 }
 
 static void initialize_open_ssl() {
@@ -217,13 +229,17 @@ int main(int argc, char* argv[]) {
 
             send_http_request(*stream, parsed_url, config, current_cookie);
 
-            auto text_opt = server_response_to_text(*stream, config.verbosity);
-            if (!text_opt.has_value()) {
-                //timeout, try again
+            HeaderReadResult header_result = server_response_to_text(*stream, config.verbosity);
+
+            if (header_result.result == StreamResult::TIMEOUT) {
                 continue;
             }
 
-            const std::string server_response_text = text_opt.value();
+            if (header_result.result == StreamResult::CLOSED_BY_SERVER) {
+                break;
+            }
+
+            const std::string server_response_text = header_result.text;
 
             auto response_opt = process_http_response(server_response_text);
             if (!response_opt.has_value()) {
@@ -236,7 +252,15 @@ int main(int argc, char* argv[]) {
             }
 
             if (response_data.status_code == 200) {
-                listen_to_music(*stream, is_running, response_data.icy_metaint, config.verbosity);
+                StreamResult stream_result = listen_to_music(*stream, is_running, response_data.icy_metaint, config.verbosity);
+
+                if (stream_result == StreamResult::TIMEOUT) {
+                    continue;
+                }
+
+                if (stream_result == StreamResult::CLOSED_BY_SERVER || stream_result == StreamResult::STOPPED_BY_CLIENT) {
+                    break;
+                }
             } else if (response_data.status_code == 301 || response_data.status_code == 302) {
                 // redirect
                 if (response_data.new_location.empty()) {
@@ -261,13 +285,6 @@ int main(int argc, char* argv[]) {
                 throw std::runtime_error("unsuported status code " + std::to_string(response_data.status_code));
             }
         }
-
-
-    } catch (const ConnectionClosedException& e) {
-        // server closed the connection
-        // TODO: wypisz wszystkie odebrane do tej pory dane
-        is_running = false;
-        exit_code = EXIT_SUCCESS;
     } catch (const std::invalid_argument& e) {
         is_running = false;
         std::cerr << "ERROR: " << e.what() << std::endl;
