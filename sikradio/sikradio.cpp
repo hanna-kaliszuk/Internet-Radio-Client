@@ -3,6 +3,7 @@
 #include "network_logic.h"
 #include "url_parser.h"
 #include "IStream.h"
+#include "logger.h"
 
 #include <iostream>
 #include <atomic>
@@ -13,6 +14,8 @@
 #include <openssl/err.h>
 #include <sys/socket.h>
 
+
+
 static void handle_no_metadata(IStream& stream, std::atomic<bool>& is_running, const int verbosity) {
     while (is_running) {
         char buffer[4096];
@@ -22,9 +25,7 @@ static void handle_no_metadata(IStream& stream, std::atomic<bool>& is_running, c
         if (bytes_read < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // timeout
-                if (verbosity > 0) {
-                    std::cerr<<"timeout. trying to connect again."<<std::endl;
-                }
+                log_message(verbosity, VerbosityLevel::NON_CRITICAL, "timeout: no data received. reconnecting...");
                 break;
             }
 
@@ -36,6 +37,8 @@ static void handle_no_metadata(IStream& stream, std::atomic<bool>& is_running, c
         }
 
         std::cout.write(buffer, bytes_read);
+
+        log_message(verbosity, VerbosityLevel::DEBUG,  "####DEBUG#### audio: wrote " + std::to_string(bytes_read) + " bytes");
     }
 }
 
@@ -54,11 +57,10 @@ static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, cons
         if (bytes_read < 0) {
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // tiemout
-                if (verbosity > 0) {
-                    std::cerr<<"timeout. trying to connect again."<<std::endl;
-                }
+                log_message(verbosity, VerbosityLevel::NON_CRITICAL, "timeout: no data received. reconnecting...");
                 break;
             }
+
             throw std::runtime_error("audio read error");
         }
         if (bytes_read == 0) {
@@ -71,6 +73,8 @@ static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, cons
             case StreamState::AUDIO:
                 std::cout.write(buffer, bytes_read);
 
+                log_message(verbosity, VerbosityLevel::DEBUG,"####DEBUG#### audio: wrote " + std::to_string(bytes_read) + " bytes");
+
                 if (bytes_to_read == 0) {
                     state = StreamState::MULTIPLIER;
                     bytes_to_read = 1;
@@ -80,6 +84,8 @@ static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, cons
             case StreamState::MULTIPLIER: {
                 unsigned char k = static_cast<unsigned char>(buffer[0]);
                 size_t metadata_length = k * 16;
+
+                log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### metadata block: k=" + std::to_string(k) + " length=" + std::to_string(metadata_length));
 
                 if (metadata_length == 0) {
                     state = StreamState::AUDIO;
@@ -107,6 +113,8 @@ static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, cons
 
                     if (!clean_meta.empty()) {
                         std::cerr << clean_meta << "\n";
+
+                        log_message(verbosity, VerbosityLevel::DEBUG,"####DEBUG#### metadata: " + clean_meta);
                     }
 
                     // go back to listening to music
@@ -122,9 +130,13 @@ static void handle_metadata(IStream& stream, std::atomic<bool>& is_running, cons
 
 static void listen_to_music(IStream& stream, std::atomic<bool>& is_running, const size_t metaint, const int verbosity) {
     if (metaint == 0) {
+        log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### mode: no metadata (raw audio)");
         handle_no_metadata(stream, is_running, verbosity);
         return;
     }
+
+    log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### mode: metadata interleaved every "
+        + std::to_string(metaint) + " bytes");
 
     handle_metadata(stream, is_running, metaint, verbosity);
 }
@@ -168,9 +180,17 @@ int main(int argc, char* argv[]) {
         });
 
     int exit_code = EXIT_SUCCESS;
+    ClientConfig config;
 
     try {
-        ClientConfig config = parse_arguments(argc, argv);
+        config = parse_arguments(argc, argv);
+
+        log_message(
+            config.verbosity, VerbosityLevel::DEBUG,
+            "####DEBUG#### config: url=" + config.server_url
+            + " timeout=" + std::to_string(config.timeout)
+            + " verbosity=" + std::to_string(config.verbosity)
+        );
 
         std::string current_url = config.server_url;
         std::string current_cookie = "";
@@ -186,11 +206,18 @@ int main(int argc, char* argv[]) {
 
             ParsedURL const parsed_url = parsed_opt.value();
 
+            log_message(
+                config.verbosity, VerbosityLevel::DEBUG,
+                "####DEBUG#### parsed URL: host=" + parsed_url.hostname
+                + " port=" + parsed_url.port_str
+                + " path=" + parsed_url.path
+            );
+
             stream = connect_to_server(parsed_url, config);
 
             send_http_request(*stream, parsed_url, config, current_cookie);
 
-            auto text_opt = server_response_to_text(*stream);
+            auto text_opt = server_response_to_text(*stream, config.verbosity);
             if (!text_opt.has_value()) {
                 //timeout, try again
                 continue;
@@ -221,7 +248,11 @@ int main(int argc, char* argv[]) {
                     current_cookie = response_data.cookie;
                 }
 
-                // TODO: wypisanie odpowiednich logów
+                // // TODO: wypisanie odpowiednich logów
+                // if (config.verbosity >= 1) {
+                //     std::cerr << get_current_timestamp() << "\n";
+                //     std::cerr << "redirecting to " << current_url << "\n";
+                // }
 
                 // go back to connecting again
                 continue;
@@ -237,13 +268,22 @@ int main(int argc, char* argv[]) {
         // TODO: wypisz wszystkie odebrane do tej pory dane
         is_running = false;
         exit_code = EXIT_SUCCESS;
-    } catch (const std::exception& e) {
+    } catch (const std::invalid_argument& e) {
         is_running = false;
         std::cerr << "ERROR: " << e.what() << std::endl;
+        exit_code = EXIT_FAILURE;
+    } catch (const std::exception& e) {
+        // critical errors
+        is_running = false;
+        if (config.verbosity >= 2) {
+            std::cerr << get_current_timestamp() << "\n";
+            std::cerr << "CRITICAL ERROR: " << e.what() << std::endl;
+        }
         exit_code = EXIT_FAILURE;
     }
 
     is_running = false;
+
     if (input_thread.joinable()) {
         // wait for the thread to finish
         input_thread.join();

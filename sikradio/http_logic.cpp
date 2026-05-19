@@ -1,4 +1,5 @@
 #include "http_logic.h"
+#include "logger.h"
 
 #include <algorithm>
 #include <unistd.h>
@@ -117,12 +118,12 @@ void send_http_request(IStream& stream, const ParsedURL& parsed_url, const Clien
         throw std::runtime_error("failed to write request to socket");
     }
 
-    // TODO: wypisywanie logów w zależności od ustawionego verbosity
+    log_message(config.verbosity, VerbosityLevel::COMMON, request);
 
 }
 
 // wczytuje to co wyslal serwer bit po bicie az do dojscia do \r\n\r\n
-std::optional<std::string> server_response_to_text(IStream& stream) {
+std::optional<std::string> server_response_to_text(IStream& stream, const int verbosity) {
     char c;
     ssize_t bytes_read = 0;
 
@@ -143,7 +144,7 @@ std::optional<std::string> server_response_to_text(IStream& stream) {
             // bytes read < 0 => check errno
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // timeout
-                // TODO: moze dodac tutaj printa, ze timeout
+                log_message(verbosity, VerbosityLevel::NON_CRITICAL, "timeout waiting for server response.");
 
                 return std::nullopt;
             }

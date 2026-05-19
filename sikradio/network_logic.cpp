@@ -2,6 +2,7 @@
 #include "tcp_stream.h"
 #include "tls_stream.h"
 #include "IStream.h"
+#include "logger.h"
 
 #include <sys/socket.h>
 #include <netdb.h>
@@ -15,18 +16,7 @@
 
 using AddrInfoPtr = std::unique_ptr<struct addrinfo, decltype(&freeaddrinfo)>;
 
-static std::string get_current_timestamp() {
-    auto now = std::chrono::system_clock::now();
-    std::time_t now_time = std::chrono::system_clock::to_time_t(now);
-    std::tm* local_time = std::localtime(&now_time);
-
-    std::ostringstream oss;
-    // format: YYYY.MM.DD HH.MM.SS
-    oss << std::put_time(local_time, "%Y.%m.%d %H.%M.%S");
-    return oss.str();
-}
-
-static void log_connection_attempt(const struct addrinfo* rp) {
+static void log_connection_attempt(const struct addrinfo* rp, const int verbosity) {
     char ip_str[INET6_ADDRSTRLEN] = {0};
     uint16_t port = 0;
 
@@ -36,7 +26,7 @@ static void log_connection_attempt(const struct addrinfo* rp) {
         port = ntohs(ipv4->sin_port);
         
         // format ipv4
-        std::cerr << "connecting to server " << ip_str << ":" << port << "\n";
+        log_message(verbosity, VerbosityLevel::COMMON, "connecting to server " + std::string(ip_str) + ":" + std::to_string(port));
         
     } else if (rp->ai_family == AF_INET6) {
         auto* ipv6 = reinterpret_cast<struct sockaddr_in6*>(rp->ai_addr);
@@ -44,7 +34,7 @@ static void log_connection_attempt(const struct addrinfo* rp) {
         port = ntohs(ipv6->sin6_port);
         
         // format ipv6
-        std::cerr << "connecting to server [" << ip_str << "]:" << port << "\n";
+        log_message(verbosity, VerbosityLevel::COMMON, "connecting to server [" + std::string(ip_str) + "]:" + std::to_string(port));
     }
 }
 
@@ -53,8 +43,7 @@ static void log_connection_attempt(const struct addrinfo* rp) {
  * preferences (IPv4 / IPv6) and returns a smart pointer managing memory allocated by getaddrinfo.
  */
 static AddrInfoPtr resolve_hostname(const ParsedURL& parsed_url, const ClientConfig& config) {
-    std::cerr << get_current_timestamp() << "\n";
-    std::cerr << "resolving name " << parsed_url.hostname << std::endl;
+    log_message(config.verbosity, VerbosityLevel::COMMON, "resolving name " + parsed_url.hostname, true);
 
     struct addrinfo hints = {};
     hints.ai_socktype = SOCK_STREAM;
@@ -68,6 +57,8 @@ static AddrInfoPtr resolve_hostname(const ParsedURL& parsed_url, const ClientCon
     } else {
         hints.ai_family = AF_UNSPEC;
     }
+
+    log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### IP version: " + std::to_string(hints.ai_family));
 
     struct addrinfo *raw_result = nullptr;
     int errcode = getaddrinfo(parsed_url.hostname.c_str(), parsed_url.port_str.c_str(), &hints, &raw_result);
@@ -85,10 +76,11 @@ static AddrInfoPtr resolve_hostname(const ParsedURL& parsed_url, const ClientCon
  * Returns the file descriptor of the first successfully connected socket,  or throws an exception if all connection
  * attempts fail.
  */
-static int connect_to_the_first_working_address(const struct addrinfo* addresses) {
+static int connect_to_the_first_working_address(const struct addrinfo* addresses, const int verbosity) {
     int socket_fd = -1;
+
     for (auto rp = addresses; rp != nullptr; rp = rp->ai_next) {
-        log_connection_attempt(addresses);
+        log_connection_attempt(rp, verbosity);
 
         socket_fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 
@@ -100,6 +92,7 @@ static int connect_to_the_first_working_address(const struct addrinfo* addresses
             break;
         }
 
+        log_message(verbosity, VerbosityLevel::NON_CRITICAL, "connection to IP failed. trying next...");
         close(socket_fd);
         socket_fd = -1;
     }
@@ -116,7 +109,7 @@ static int connect_to_the_first_working_address(const struct addrinfo* addresses
  * @brief Configures the maximum wait time (timeout) for receiving data from the socket.
  * Converts milliseconds into a timeval structure and applies it using the SO_RCVTIMEO flag.
  */
-static void configure_socket_timeout(const int socket_fd, const uint32_t timeout) {
+static void configure_socket_timeout(const int socket_fd, const uint32_t timeout, const int verbosity) {
     struct timeval tv = {};
     tv.tv_sec = timeout / 1000;
     tv.tv_usec = (timeout % 1000) * 1000;
@@ -125,14 +118,17 @@ static void configure_socket_timeout(const int socket_fd, const uint32_t timeout
         close(socket_fd);
         throw std::runtime_error(std::string("failed to set socket receive timeout"));
     }
+
+    log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### socket timeout set to " + std::to_string(tv.tv_sec) + "." + std::to_string(tv.tv_usec) + " s");
+
 }
 
 std::unique_ptr<IStream> connect_to_server(const ParsedURL& parsed_url, const ClientConfig& config) {
     AddrInfoPtr const resolved_address = resolve_hostname(parsed_url, config);
 
-    int const socket_fd = connect_to_the_first_working_address(resolved_address.get());
+    int const socket_fd = connect_to_the_first_working_address(resolved_address.get(), config.verbosity);
 
-    configure_socket_timeout(socket_fd, config.timeout);
+    configure_socket_timeout(socket_fd, config.timeout, config.verbosity);
 
     if (parsed_url.protocol == Protocol::HTTPS) {
         return std::make_unique<TlsStream>(socket_fd, parsed_url.hostname);
