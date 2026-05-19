@@ -13,7 +13,7 @@ static void write_all(IStream& stream, const char* data, size_t length) {
         ssize_t written = stream.write(data + written_total, length - written_total);
 
         if (written < 0) {
-            if (errno == EINTR | errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
                 continue;
             }
 
