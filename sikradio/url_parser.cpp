@@ -5,15 +5,17 @@ static bool is_valid_port(const std::string& port) {
         return false;
     }
 
-    for (unsigned char c : port) {
-        if (!std::isdigit(c)) {
+    for (char c : port) {
+        if (!std::isdigit(static_cast<unsigned char>(c))) {
             return false;
         }
     }
 
     try {
-        int value = std::stoi(port);
-        return value >= 1 && value <= 65535;
+        size_t pos = 0;
+        int value = std::stoi(port, &pos);
+
+        return pos == port.size() && value >= 1 && value <= 65535;
     } catch (...) {
         return false;
     }
