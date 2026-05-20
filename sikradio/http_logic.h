@@ -23,4 +23,4 @@ void send_http_request(IStream& stream, const ParsedURL& parsed_url, const Clien
 
 HeaderReadResult server_response_to_text(IStream& stream, const int verbosity);
 
-std::optional<HttpResponseData> process_http_response(const std::string& headers_text);
+std::optional<HttpResponseData> process_http_response(const std::string& headers_text, const int verbosity);

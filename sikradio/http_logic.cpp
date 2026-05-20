@@ -28,7 +28,7 @@ static void write_all(IStream& stream, const char* data, size_t length) {
     }
 }
 
-static void handle_200_ok(std::istringstream& stream, HttpResponseData& response) {
+static void handle_200_ok(std::istringstream& stream, HttpResponseData& response, const int verbosity) {
     std::string current_line;
 
     while (std::getline(stream, current_line)) {
@@ -45,6 +45,7 @@ static void handle_200_ok(std::istringstream& stream, HttpResponseData& response
         size_t colon_pos = current_line.find(':');
         if (colon_pos == std::string::npos) {
             // malformed header (according to the http standard)
+            log_message(verbosity, VerbosityLevel::NON_CRITICAL, "malformed HTTP header ignored.");
             continue;
         }
 
@@ -59,13 +60,15 @@ static void handle_200_ok(std::istringstream& stream, HttpResponseData& response
                 response.icy_metaint = std::stoull(value);
             } catch (...) {
                 response.icy_metaint = 0;
+
+                log_message(verbosity, VerbosityLevel::NON_CRITICAL, "invalid icy-metaint value. metadata disabled.;")
             }
         }
 
     }
 }
 
-static void handle_redirect(std::istringstream& stream, HttpResponseData& response) {
+static void handle_redirect(std::istringstream& stream, HttpResponseData& response, const int verbosity) {
     std::string current_line;
 
     while (std::getline(stream, current_line)) {
@@ -80,6 +83,7 @@ static void handle_redirect(std::istringstream& stream, HttpResponseData& respon
         size_t colon_pos = current_line.find(':');
         if (colon_pos == std::string::npos) {
             // malformed header (according to the http standard)
+            log_message(verbosity, VerbosityLevel::NON_CRITICAL, "malformed HTTP header ignored.");
             continue;
         }
 
@@ -177,7 +181,7 @@ HeaderReadResult server_response_to_text(IStream& stream, const int verbosity) {
     }
 }
 
-std::optional<HttpResponseData> process_http_response(const std::string &headers_text) {
+std::optional<HttpResponseData> process_http_response(const std::string &headers_text, const int verbosity ) {
     if (headers_text.empty()) {
         // no response from the server
         return std::nullopt;
@@ -205,11 +209,11 @@ std::optional<HttpResponseData> process_http_response(const std::string &headers
 
     switch (response.status_code) {
         case 200:
-            handle_200_ok(main_stream, response);
+            handle_200_ok(main_stream, response, verbosity);
             break;
         case 301:
         case 302:
-            handle_redirect(main_stream, response);
+            handle_redirect(main_stream, response, verbosity);
             break;
         default:
             response.critical_error = true;

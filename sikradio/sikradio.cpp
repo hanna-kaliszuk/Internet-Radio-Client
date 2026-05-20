@@ -32,6 +32,8 @@ static StreamResult handle_no_metadata(IStream& stream, std::atomic<bool>& is_ru
         }
 
         if (bytes_read == 0) {
+            log_message(verbosity, VerbosityLevel::COMMON, "connection closed by server");
+
             return StreamResult::CLOSED_BY_SERVER;
         }
 
@@ -43,6 +45,8 @@ static StreamResult handle_no_metadata(IStream& stream, std::atomic<bool>& is_ru
 
         log_message(verbosity, VerbosityLevel::DEBUG,  "####DEBUG#### audio: wrote " + std::to_string(bytes_read) + " bytes");
     }
+
+    log_message(verbosity, VerbosityLevel::COMMON, "client requested shutdown");
 
     return StreamResult::STOPPED_BY_CLIENT;
 }
@@ -70,6 +74,8 @@ static StreamResult handle_metadata(IStream& stream, std::atomic<bool>& is_runni
             throw std::runtime_error("audio read error");
         }
         if (bytes_read == 0) {
+            log_message(verbosity, VerbosityLevel::COMMON, "connection closed by server");
+
             return StreamResult::CLOSED_BY_SERVER;
         }
 
@@ -136,6 +142,8 @@ static StreamResult handle_metadata(IStream& stream, std::atomic<bool>& is_runni
                 break;
         }
     }
+
+    log_message(verbosity, VerbosityLevel::COMMON, "client requested shutdown");
 
     return StreamResult::STOPPED_BY_CLIENT;
 }
@@ -240,8 +248,9 @@ int main(int argc, char* argv[]) {
             }
 
             const std::string server_response_text = header_result.text;
+            log_message(config.verbosity, VerbosityLevel::COMMON, server_response_text);
 
-            auto response_opt = process_http_response(server_response_text);
+            auto response_opt = process_http_response(server_response_text, config.verbosity);
             if (!response_opt.has_value()) {
                 throw std::runtime_error("invalid response");
             }
@@ -272,13 +281,7 @@ int main(int argc, char* argv[]) {
                     current_cookie = response_data.cookie;
                 }
 
-                // // TODO: wypisanie odpowiednich logów
-                // if (config.verbosity >= 1) {
-                //     std::cerr << get_current_timestamp() << "\n";
-                //     std::cerr << "redirecting to " << current_url << "\n";
-                // }
-
-                // go back to connecting again
+                log_message(config.verbosity, VerbosityLevel::COMMON, "redirecting to " + current_url, true);
                 continue;
             } else {
                 // TODO: zmien to

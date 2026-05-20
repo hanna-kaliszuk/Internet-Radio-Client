@@ -85,6 +85,7 @@ static int connect_to_the_first_working_address(const struct addrinfo* addresses
         socket_fd = socket(rp->ai_family, rp->ai_socktype, rp->ai_protocol);
 
         if (socket_fd == -1) {
+            log_message(verbosity, VerbosityLevel::NON_CRITICAL, "socket creation failed. trying next...;");
             continue;
         }
 
