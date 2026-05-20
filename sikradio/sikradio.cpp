@@ -219,6 +219,9 @@ int main(int argc, char* argv[]) {
 
     try {
         config = parse_arguments(argc, argv);
+        if (!parseUrl(config.server_url).has_value()) {
+            throw std::invalid_argument("invalid URL format: " + config.server_url);
+        }
 
         log_message(
             config.verbosity, VerbosityLevel::DEBUG,
@@ -279,14 +282,13 @@ int main(int argc, char* argv[]) {
 
             if (response_data.status_code == 200) {
                 StreamResult stream_result = listen_to_music(*stream, is_running, response_data.icy_metaint, config.verbosity);
+                log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### listen_to_music result: " + stream_result_to_string(stream_result));
 
                 if (stream_result == StreamResult::TIMEOUT) {
-                    log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### listen_to_music result: " + stream_result_to_string(stream_result));
                     continue;
                 }
 
                 if (stream_result == StreamResult::CLOSED_BY_SERVER || stream_result == StreamResult::STOPPED_BY_CLIENT) {
-                    log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### listen_to_music result: " + stream_result_to_string(stream_result));
                     break;
                 }
             } else if (response_data.status_code == 301 || response_data.status_code == 302) {
@@ -300,6 +302,8 @@ int main(int argc, char* argv[]) {
 
                 if (!response_data.cookie.empty()) {
                     current_cookie = response_data.cookie;
+
+                    log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### current_cookie updated");
                 }
 
                 log_message(config.verbosity, VerbosityLevel::COMMON, "redirecting to " + current_url, true);
