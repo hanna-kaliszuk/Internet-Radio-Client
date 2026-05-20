@@ -47,7 +47,7 @@ ClientConfig parse_arguments(int argc, char* argv[]) {
                 }
 
                 if (t < 100 || t > 100000) {
-                    throw std::out_of_range("value for -t must be between 100 and 100000");
+                    throw std::invalid_argument("value for -t must be between 100 and 100000");
                 }
 
                 config.timeout = static_cast<uint32_t>(t);
@@ -81,7 +81,7 @@ ClientConfig parse_arguments(int argc, char* argv[]) {
                 }
 
                 if (v < 0 || v > 4) {
-                    throw std::out_of_range("value for -v must be between 0 and 4");
+                    throw std::invalid_argument("value for -v must be between 0 and 4");
                 }
 
                 config.verbosity = v;
