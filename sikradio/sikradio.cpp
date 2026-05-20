@@ -318,13 +318,18 @@ int main(int argc, char* argv[]) {
         std::cerr << "ERROR: " << e.what() << std::endl;
         exit_code = EXIT_FAILURE;
     } catch (const std::exception& e) {
-        // critical errors
-        is_running = false;
-        if (config.verbosity >= 2) {
-            std::cerr << get_current_timestamp() << "\n";
-            std::cerr << "CRITICAL ERROR: " << e.what() << std::endl;
+        if (!is_running) {
+            exit_code = EXIT_SUCCESS;
+        } else {
+            is_running = false;
+
+            if (config.verbosity >= 2) {
+                std::cerr << get_current_timestamp() << "\n";
+                std::cerr << "CRITICAL ERROR: " << e.what() << std::endl;
+            }
+
+            exit_code = EXIT_FAILURE;
         }
-        exit_code = EXIT_FAILURE;
     }
 
     is_running = false;
