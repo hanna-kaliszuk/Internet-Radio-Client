@@ -14,6 +14,21 @@
 #include <openssl/err.h>
 #include <sys/socket.h>
 
+static std::string stream_result_to_string(StreamResult result) {
+    switch (result) {
+        case StreamResult::OK:
+            return "OK";
+        case StreamResult::TIMEOUT:
+            return "TIMEOUT";
+        case StreamResult::CLOSED_BY_SERVER:
+            return "CLOSED_BY_SERVER";
+        case StreamResult::STOPPED_BY_CLIENT:
+            return "STOPPED_BY_CLIENT";
+    }
+
+    return "UNKNOWN";
+}
+
 static StreamResult handle_no_metadata(IStream& stream, std::atomic<bool>& is_running, const int verbosity) {
     while (is_running) {
         char buffer[4096];
@@ -131,7 +146,7 @@ static StreamResult handle_metadata(IStream& stream, std::atomic<bool>& is_runni
                     if (!clean_meta.empty()) {
                         std::cerr << clean_meta << "\n";
 
-                        log_message(verbosity, VerbosityLevel::DEBUG,"####DEBUG#### metadata: " + clean_meta);
+                        log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### metadata payload size=" + std::to_string(clean_meta.size()) + " bytes");
                     }
 
                     // go back to listening to music
@@ -240,10 +255,12 @@ int main(int argc, char* argv[]) {
             HeaderReadResult header_result = server_response_to_text(*stream, config.verbosity);
 
             if (header_result.result == StreamResult::TIMEOUT) {
+                log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### header read result: TIMEOUT");
                 continue;
             }
 
             if (header_result.result == StreamResult::CLOSED_BY_SERVER) {
+                log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### header read result: CLOSED_BY_SERVER");
                 break;
             }
 
@@ -264,10 +281,12 @@ int main(int argc, char* argv[]) {
                 StreamResult stream_result = listen_to_music(*stream, is_running, response_data.icy_metaint, config.verbosity);
 
                 if (stream_result == StreamResult::TIMEOUT) {
+                    log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### listen_to_music result: " + stream_result_to_string(stream_result));
                     continue;
                 }
 
                 if (stream_result == StreamResult::CLOSED_BY_SERVER || stream_result == StreamResult::STOPPED_BY_CLIENT) {
+                    log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### listen_to_music result: " + stream_result_to_string(stream_result));
                     break;
                 }
             } else if (response_data.status_code == 301 || response_data.status_code == 302) {
@@ -277,6 +296,8 @@ int main(int argc, char* argv[]) {
                 }
 
                 current_url = response_data.new_location;
+                log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### current_url updated to: " + current_url);
+
                 if (!response_data.cookie.empty()) {
                     current_cookie = response_data.cookie;
                 }

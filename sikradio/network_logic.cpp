@@ -67,6 +67,14 @@ static AddrInfoPtr resolve_hostname(const ParsedURL& parsed_url, const ClientCon
         throw std::runtime_error(std::string("getaddrinfo: ") + gai_strerror(errcode));
     }
 
+    int addr_count = 0;
+    for (auto rp = raw_result; rp != nullptr; rp = rp->ai_next) {
+        addr_count++;
+    }
+
+    log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### getaddrinfo returned " +
+        std::to_string(addr_count) + " address(es)");
+
     AddrInfoPtr result(raw_result, &freeaddrinfo);
     return result;
 }
@@ -90,6 +98,7 @@ static int connect_to_the_first_working_address(const struct addrinfo* addresses
         }
 
         if (connect(socket_fd, rp->ai_addr, rp->ai_addrlen) == 0) {
+            log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### connect succeeded: fd=" + std::to_string(socket_fd));
             break;
         }
 

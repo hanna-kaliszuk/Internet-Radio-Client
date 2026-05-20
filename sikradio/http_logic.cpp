@@ -6,7 +6,7 @@
 #include <iostream>
 #include <sstream>
 
-static void write_all(IStream& stream, const char* data, size_t length) {
+static void write_all(IStream& stream, const char* data, size_t length, const int verbosity) {
     size_t written_total = 0;
 
     while (written_total < length) {
@@ -25,6 +25,9 @@ static void write_all(IStream& stream, const char* data, size_t length) {
         }
 
         written_total += static_cast<size_t>(written);
+
+        log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### request write progress: " +
+            std::to_string(written_total) + "/" + std::to_string(length) + " bytes");
     }
 }
 
@@ -58,10 +61,12 @@ static void handle_200_ok(std::istringstream& stream, HttpResponseData& response
         if (key == "icy-metaint") {
             try {
                 response.icy_metaint = std::stoull(value);
+
+                log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### icy-metaint parsed: " + std::to_string(response.icy_metaint));
             } catch (...) {
                 response.icy_metaint = 0;
 
-                log_message(verbosity, VerbosityLevel::NON_CRITICAL, "invalid icy-metaint value. metadata disabled.;")
+                log_message(verbosity, VerbosityLevel::NON_CRITICAL, "invalid icy-metaint value. metadata disabled.");
             }
         }
 
@@ -96,6 +101,7 @@ static void handle_redirect(std::istringstream& stream, HttpResponseData& respon
         if (key == "location") {
             const size_t first_non_space = value.find_first_not_of(' ');
             if (first_non_space != std::string::npos) {
+                log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### redirect Location parsed: " + response.new_location);
                 response.new_location = value.substr(first_non_space);
             }
         } else if (key == "set-cookie") {
@@ -103,9 +109,11 @@ static void handle_redirect(std::istringstream& stream, HttpResponseData& respon
             const size_t semicolon_pos = value.find_first_of(';');
 
             if (first_non_space == std::string::npos) {
-                // no cookies fou
+                // no cookies found
                 break;
             }
+
+            log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### cookie parsed");
 
             if (semicolon_pos == std::string::npos) {
                 response.cookie = value.substr(first_non_space);
@@ -138,7 +146,7 @@ std::string build_http_request(const ParsedURL& parsed_url, const ClientConfig& 
 void send_http_request(IStream& stream, const ParsedURL& parsed_url, const ClientConfig& config, const std::string current_cookie){
     std::string request = build_http_request(parsed_url, config, current_cookie);
 
-    write_all(stream, request.data(), request.length());
+    write_all(stream, request.data(), request.length(), config.verbosity);
 
     log_message(config.verbosity, VerbosityLevel::COMMON, request);
 }
@@ -163,6 +171,7 @@ HeaderReadResult server_response_to_text(IStream& stream, const int verbosity) {
             }
 
             if (received_text.ends_with("\r\n\r\n")) {
+                log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### received HTTP headers size=" + std::to_string(received_text.size()) + " bytes");
                 return HeaderReadResult{StreamResult::OK, received_text};
             }
         } else if (bytes_read == 0) {
@@ -181,7 +190,7 @@ HeaderReadResult server_response_to_text(IStream& stream, const int verbosity) {
     }
 }
 
-std::optional<HttpResponseData> process_http_response(const std::string &headers_text, const int verbosity ) {
+std::optional<HttpResponseData> process_http_response(const std::string &headers_text, const int verbosity) {
     if (headers_text.empty()) {
         // no response from the server
         return std::nullopt;
@@ -204,6 +213,7 @@ std::optional<HttpResponseData> process_http_response(const std::string &headers
 
     if (!(line_stream >> protocol >> response.status_code)) {
         // if extracting a number is not possible
+        log_message(verbosity, VerbosityLevel::DEBUG,"####DEBUG#### HTTP status parsed: protocol=" + protocol + " status=" + std::to_string(response.status_code));
         return std::nullopt;
     }
 
