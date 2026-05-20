@@ -1,5 +1,24 @@
 #include "url_parser.h"
 
+static bool is_valid_port(const std::string& port) {
+    if (port.empty()) {
+        return false;
+    }
+
+    for (unsigned char c : port) {
+        if (!std::isdigit(c)) {
+            return false;
+        }
+    }
+
+    try {
+        int value = std::stoi(port);
+        return value >= 1 && value <= 65535;
+    } catch (...) {
+        return false;
+    }
+}
+
 std::optional<ParsedURL> parseUrl(const std::string& url) {
     ParsedURL result;
 
@@ -47,6 +66,10 @@ std::optional<ParsedURL> parseUrl(const std::string& url) {
         (bracket_position == std::string::npos || colon_position > bracket_position)) {
 
         result.port_str = host_buffer.substr(colon_position + 1); // +1 not to include ':'
+        if (!is_valid_port(result.port_str)) {
+            return std::nullopt;
+        }
+
         result.hostname = host_buffer.substr(0, colon_position);
     } else {
         // no unusual port provided
@@ -65,5 +88,3 @@ std::optional<ParsedURL> parseUrl(const std::string& url) {
 
     return result;
 }
-
-
