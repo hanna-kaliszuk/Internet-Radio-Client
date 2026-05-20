@@ -97,6 +97,8 @@ static int connect_to_the_first_working_address(const struct addrinfo* addresses
             continue;
         }
 
+        log_message(verbosity, VerbosityLevel::DEBUG,"####DEBUG#### socket created: fd=" + std::to_string(socket_fd));
+
         if (connect(socket_fd, rp->ai_addr, rp->ai_addrlen) == 0) {
             log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### connect succeeded: fd=" + std::to_string(socket_fd));
             break;
