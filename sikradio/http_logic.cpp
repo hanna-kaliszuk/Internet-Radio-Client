@@ -62,6 +62,13 @@ static void handle_200_ok(std::istringstream& stream, HttpResponseData& response
             try {
                 response.icy_metaint = std::stoull(value);
 
+                size_t pos = 0;
+                response.icy_metaint = std::stoull(value, &pos);
+
+                if (pos != value.find_last_not_of(" \t\r\n") + 1) {
+                    throw std::invalid_argument("trailing characters");
+                }
+
                 log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### icy-metaint parsed: " + std::to_string(response.icy_metaint));
             } catch (...) {
                 response.icy_metaint = 0;
@@ -101,8 +108,9 @@ static void handle_redirect(std::istringstream& stream, HttpResponseData& respon
         if (key == "location") {
             const size_t first_non_space = value.find_first_not_of(' ');
             if (first_non_space != std::string::npos) {
-                log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### redirect Location parsed: " + response.new_location);
                 response.new_location = value.substr(first_non_space);
+
+                log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### redirect Location parsed: " + response.new_location);
             }
         } else if (key == "set-cookie") {
             const size_t first_non_space = value.find_first_not_of(' ');
@@ -110,7 +118,8 @@ static void handle_redirect(std::istringstream& stream, HttpResponseData& respon
 
             if (first_non_space == std::string::npos) {
                 // no cookies found
-                break;
+                    log_message(verbosity, VerbosityLevel::NON_CRITICAL,"empty Set-Cookie header ignored.");
+                    continue;
             }
 
             log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### cookie parsed");
@@ -213,9 +222,10 @@ std::optional<HttpResponseData> process_http_response(const std::string &headers
 
     if (!(line_stream >> protocol >> response.status_code)) {
         // if extracting a number is not possible
-        log_message(verbosity, VerbosityLevel::DEBUG,"####DEBUG#### HTTP status parsed: protocol=" + protocol + " status=" + std::to_string(response.status_code));
         return std::nullopt;
     }
+
+    log_message(verbosity, VerbosityLevel::DEBUG,"####DEBUG#### HTTP status parsed: protocol=" + protocol + " status=" + std::to_string(response.status_code));
 
     switch (response.status_code) {
         case 200:
