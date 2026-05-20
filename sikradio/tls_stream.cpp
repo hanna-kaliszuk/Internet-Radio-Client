@@ -28,7 +28,6 @@ TlsStream::TlsStream(int fd, const std::string& hostname) : socket_fd(fd), ctx(n
 
     // tls handshake
     if (SSL_connect(ssl) <= 0) {
-        ERR_print_errors_fp(stderr);
         close();
         throw std::runtime_error("TLS Handshake failed for host: " + hostname);
     }
