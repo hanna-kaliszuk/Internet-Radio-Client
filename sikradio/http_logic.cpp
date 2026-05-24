@@ -135,7 +135,17 @@ static void handle_redirect(std::istringstream& stream, HttpResponseData& respon
 
 std::string build_http_request(const ParsedURL& parsed_url, const ClientConfig& config, const std::string& current_cookie) {
     std::string request = "GET " + parsed_url.path + " HTTP/1.1\r\n";
-    request += "Host: " + parsed_url.hostname + "\r\n";
+    std::string host_hdr = parsed_url.hostname;
+
+    if (host_hdr.find(':') != std::string::npos && host_hdr.front() != '[') {
+        host_hdr = "[" + host_hdr + "]";
+    }
+
+    if (!parsed_url.port_str.empty()) {
+        host_hdr += ":" + parsed_url.port_str;
+    }
+
+    request += "Host: " + host_hdr + "\r\n";
     request += "Connection: Keep-Alive\r\n";
 
     if (!current_cookie.empty()) {
