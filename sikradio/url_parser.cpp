@@ -1,11 +1,11 @@
 #include "url_parser.h"
 
-static bool is_valid_port(const std::string& port) {
+static bool is_valid_port(const std::string &port) {
     if (port.empty()) {
         return false;
     }
 
-    for (char c : port) {
+    for (char c: port) {
         if (!std::isdigit(static_cast<unsigned char>(c))) {
             return false;
         }
@@ -21,7 +21,7 @@ static bool is_valid_port(const std::string& port) {
     }
 }
 
-std::optional<ParsedURL> parseUrl(const std::string& url) {
+std::optional<ParsedURL> parseUrl(const std::string &url) {
     ParsedURL result;
 
     size_t offset = 0;
@@ -66,7 +66,6 @@ std::optional<ParsedURL> parseUrl(const std::string& url) {
 
     if (colon_position != std::string::npos &&
         (bracket_position == std::string::npos || colon_position > bracket_position)) {
-
         result.port_str = host_buffer.substr(colon_position + 1); // +1 not to include ':'
         if (!is_valid_port(result.port_str)) {
             return std::nullopt;

@@ -5,9 +5,9 @@
 #include <iostream>
 #include <cerrno>
 
-TlsStream::TlsStream(int fd, const std::string& hostname) : socket_fd(fd), ctx(nullptr), ssl(nullptr) {
+TlsStream::TlsStream(int fd, const std::string &hostname) : socket_fd(fd), ctx(nullptr), ssl(nullptr) {
     // tsl method for client
-    const SSL_METHOD* method = TLS_client_method();
+    const SSL_METHOD *method = TLS_client_method();
     ctx = SSL_CTX_new(method);
 
     if (!ctx) {
@@ -37,8 +37,8 @@ TlsStream::~TlsStream() {
     close();
 }
 
-ssize_t TlsStream::read(void* buffer, size_t count) {
-    if (!ssl){
+ssize_t TlsStream::read(void *buffer, size_t count) {
+    if (!ssl) {
         errno = EBADF;
         return -1;
     }
@@ -75,7 +75,7 @@ ssize_t TlsStream::read(void* buffer, size_t count) {
     }
 }
 
-ssize_t TlsStream::write(const void* buffer, size_t count) {
+ssize_t TlsStream::write(const void *buffer, size_t count) {
     if (!ssl) {
         errno = EBADF;
         return -1;

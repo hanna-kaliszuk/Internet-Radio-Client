@@ -15,7 +15,7 @@
 #include <sys/socket.h>
 #include <map>
 
-static std::string trim(const std::string& s) {
+static std::string trim(const std::string &s) {
     const size_t begin = s.find_first_not_of(" \t");
     if (begin == std::string::npos) {
         return "";
@@ -25,8 +25,8 @@ static std::string trim(const std::string& s) {
     return s.substr(begin, end - begin + 1);
 }
 
-static void store_cookie(std::map<std::string, std::string>& cookies,
-                         const std::string& cookie_pair) {
+static void store_cookie(std::map<std::string, std::string> &cookies,
+                         const std::string &cookie_pair) {
     const std::string cleaned = trim(cookie_pair);
     if (cleaned.empty()) {
         return;
@@ -47,10 +47,10 @@ static void store_cookie(std::map<std::string, std::string>& cookies,
     cookies[name] = value;
 }
 
-static std::string build_cookie_header(const std::map<std::string, std::string>& cookies) {
+static std::string build_cookie_header(const std::map<std::string, std::string> &cookies) {
     std::string result;
 
-    for (const auto& [name, value] : cookies) {
+    for (const auto &[name, value]: cookies) {
         if (!result.empty()) {
             result += "; ";
         }
@@ -76,7 +76,7 @@ static std::string stream_result_to_string(StreamResult result) {
     return "UNKNOWN";
 }
 
-static StreamResult handle_no_metadata(IStream& stream, std::atomic<bool>& is_running, const int verbosity) {
+static StreamResult handle_no_metadata(IStream &stream, std::atomic<bool> &is_running, const int verbosity) {
     while (is_running) {
         char buffer[4096];
 
@@ -117,7 +117,8 @@ static StreamResult handle_no_metadata(IStream& stream, std::atomic<bool>& is_ru
             throw std::runtime_error("failed to write audio to stdout");
         }
 
-        log_message(verbosity, VerbosityLevel::DEBUG,  "####DEBUG#### audio: wrote " + std::to_string(bytes_read) + " bytes");
+        log_message(verbosity, VerbosityLevel::DEBUG,
+                    "####DEBUG#### audio: wrote " + std::to_string(bytes_read) + " bytes");
     }
 
     log_message(verbosity, VerbosityLevel::COMMON, "client requested shutdown");
@@ -125,7 +126,8 @@ static StreamResult handle_no_metadata(IStream& stream, std::atomic<bool>& is_ru
     return StreamResult::STOPPED_BY_CLIENT;
 }
 
-static StreamResult handle_metadata(IStream& stream, std::atomic<bool>& is_running, const size_t metaint, const int verbosity) {
+static StreamResult handle_metadata(IStream &stream, std::atomic<bool> &is_running, const size_t metaint,
+                                    const int verbosity) {
     char buffer[4096];
 
     StreamState state = StreamState::AUDIO;
@@ -175,7 +177,8 @@ static StreamResult handle_metadata(IStream& stream, std::atomic<bool>& is_runni
                     throw std::runtime_error("failed to write auto do stdout");
                 }
 
-                log_message(verbosity, VerbosityLevel::DEBUG,"####DEBUG#### audio: wrote " + std::to_string(bytes_read) + " bytes");
+                log_message(verbosity, VerbosityLevel::DEBUG,
+                            "####DEBUG#### audio: wrote " + std::to_string(bytes_read) + " bytes");
 
                 if (bytes_to_read == 0) {
                     state = StreamState::MULTIPLIER;
@@ -187,7 +190,9 @@ static StreamResult handle_metadata(IStream& stream, std::atomic<bool>& is_runni
                 unsigned char k = static_cast<unsigned char>(buffer[0]);
                 size_t metadata_length = k * 16;
 
-                log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### metadata block: k=" + std::to_string(k) + " length=" + std::to_string(metadata_length));
+                log_message(verbosity, VerbosityLevel::DEBUG,
+                            "####DEBUG#### metadata block: k=" + std::to_string(k) + " length=" + std::to_string(
+                                metadata_length));
 
                 if (metadata_length == 0) {
                     state = StreamState::AUDIO;
@@ -208,7 +213,7 @@ static StreamResult handle_metadata(IStream& stream, std::atomic<bool>& is_runni
                     // remove additional '\0' that might have been added
                     std::string clean_meta;
 
-                    for (char c : metadata_buffer) {
+                    for (char c: metadata_buffer) {
                         if (c != '\0') {
                             clean_meta += c;
                         }
@@ -217,7 +222,9 @@ static StreamResult handle_metadata(IStream& stream, std::atomic<bool>& is_runni
                     if (!clean_meta.empty()) {
                         std::cerr << clean_meta << "\n";
 
-                        log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### metadata payload size=" + std::to_string(clean_meta.size()) + " bytes");
+                        log_message(verbosity, VerbosityLevel::DEBUG,
+                                    "####DEBUG#### metadata payload size=" + std::to_string(clean_meta.size()) +
+                                    " bytes");
                     }
 
                     // go back to listening to music
@@ -234,7 +241,8 @@ static StreamResult handle_metadata(IStream& stream, std::atomic<bool>& is_runni
     return StreamResult::STOPPED_BY_CLIENT;
 }
 
-static StreamResult listen_to_music(IStream& stream, std::atomic<bool>& is_running, const size_t metaint, const int verbosity) {
+static StreamResult listen_to_music(IStream &stream, std::atomic<bool> &is_running, const size_t metaint,
+                                    const int verbosity) {
     if (metaint == 0) {
         log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### mode: no metadata (raw audio)");
 
@@ -242,7 +250,7 @@ static StreamResult listen_to_music(IStream& stream, std::atomic<bool>& is_runni
     }
 
     log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### mode: metadata interleaved every "
-        + std::to_string(metaint) + " bytes");
+                                                  + std::to_string(metaint) + " bytes");
 
     return handle_metadata(stream, is_running, metaint, verbosity);
 }
@@ -253,74 +261,74 @@ static void initialize_open_ssl() {
     OpenSSL_add_all_algorithms();
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char *argv[]) {
     initialize_open_ssl();
     std::atomic<bool> is_running{true};
     std::atomic<int> current_fd{-1};
 
     std::thread input_thread([&is_running, &current_fd]() {
-    struct pollfd pfd;
-    pfd.fd = STDIN_FILENO;
-    pfd.events = POLLIN;
+        struct pollfd pfd;
+        pfd.fd = STDIN_FILENO;
+        pfd.events = POLLIN;
 
-    std::string window;
-    constexpr std::string_view quit_sequence = "quit\n";
+        std::string window;
+        constexpr std::string_view quit_sequence = "quit\n";
 
-    while (is_running) {
-        pfd.revents = 0;
+        while (is_running) {
+            pfd.revents = 0;
 
-        int ret = poll(&pfd, 1, 100);
+            int ret = poll(&pfd, 1, 100);
 
-        if (ret < 0) {
-            if (errno == EINTR) {
-                continue;
-            }
-            break;
-        }
-
-        if (ret == 0) {
-            continue;
-        }
-
-        if (pfd.revents & POLLIN) {
-            char buffer[128];
-
-            ssize_t bytes_read = read(STDIN_FILENO, buffer, sizeof(buffer));
-
-            if (bytes_read < 0) {
-                if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (ret < 0) {
+                if (errno == EINTR) {
                     continue;
                 }
                 break;
             }
 
-            if (bytes_read == 0) {
-                break;
+            if (ret == 0) {
+                continue;
             }
 
-            for (ssize_t i = 0; i < bytes_read; ++i) {
-                window += buffer[i];
+            if (pfd.revents & POLLIN) {
+                char buffer[128];
 
-                if (window.size() > quit_sequence.size()) {
-                    window.erase(0, window.size() - quit_sequence.size());
-                }
+                ssize_t bytes_read = read(STDIN_FILENO, buffer, sizeof(buffer));
 
-                if (window == quit_sequence) {
-                    is_running = false;
-
-                    int fd = current_fd.load();
-                    if (fd != -1) {
-                        shutdown(fd, SHUT_RDWR);
+                if (bytes_read < 0) {
+                    if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+                        continue;
                     }
-
                     break;
                 }
+
+                if (bytes_read == 0) {
+                    break;
+                }
+
+                for (ssize_t i = 0; i < bytes_read; ++i) {
+                    window += buffer[i];
+
+                    if (window.size() > quit_sequence.size()) {
+                        window.erase(0, window.size() - quit_sequence.size());
+                    }
+
+                    if (window == quit_sequence) {
+                        is_running = false;
+
+                        int fd = current_fd.load();
+                        if (fd != -1) {
+                            shutdown(fd, SHUT_RDWR);
+                        }
+
+                        break;
+                    }
+                }
+            } else if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) {
+                break;
             }
-        } else if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) {
-            break;
         }
-    }
-});
+    });
 
     int exit_code = EXIT_SUCCESS;
     ClientConfig config;
@@ -376,7 +384,8 @@ int main(int argc, char* argv[]) {
             }
 
             if (header_result.result == StreamResult::CLOSED_BY_SERVER) {
-                log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### header read result: CLOSED_BY_SERVER");
+                log_message(config.verbosity, VerbosityLevel::DEBUG,
+                            "####DEBUG#### header read result: CLOSED_BY_SERVER");
                 break;
             }
 
@@ -390,17 +399,18 @@ int main(int argc, char* argv[]) {
 
             const HttpResponseData response_data = response_opt.value();
             if (response_data.critical_error) {
-                throw std::runtime_error("critical error " +  std::to_string(response_data.status_code));
+                throw std::runtime_error("critical error " + std::to_string(response_data.status_code));
             }
 
             if (response_data.status_code == 200) {
                 size_t metaint = config.request_metadata ? response_data.icy_metaint : 0;
 
                 StreamResult stream_result = listen_to_music(*stream, is_running, metaint, config.verbosity);
-                log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### listen_to_music result: " + stream_result_to_string(stream_result));
+                log_message(config.verbosity, VerbosityLevel::DEBUG,
+                            "####DEBUG#### listen_to_music result: " + stream_result_to_string(stream_result));
 
                 if (stream_result == StreamResult::TIMEOUT) {
-                    stream -> close();
+                    stream->close();
                     current_fd = -1;
 
                     current_url = config.server_url;
@@ -429,9 +439,10 @@ int main(int argc, char* argv[]) {
                 }
 
                 current_url = response_data.new_location;
-                log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### current_url updated to: " + current_url);
+                log_message(config.verbosity, VerbosityLevel::DEBUG,
+                            "####DEBUG#### current_url updated to: " + current_url);
 
-                for (const std::string& cookie : response_data.cookies) {
+                for (const std::string &cookie: response_data.cookies) {
                     store_cookie(current_cookies, cookie);
                 }
 
@@ -447,7 +458,7 @@ int main(int argc, char* argv[]) {
                 throw std::runtime_error("unsuported status code " + std::to_string(response_data.status_code));
             }
         }
-    } catch (const std::invalid_argument& e) {
+    } catch (const std::invalid_argument &e) {
         if (!is_running) {
             exit_code = EXIT_SUCCESS;
         } else {
@@ -455,7 +466,7 @@ int main(int argc, char* argv[]) {
             std::cerr << "ERROR: " << e.what() << std::endl;
             exit_code = EXIT_FAILURE;
         }
-    } catch (const std::exception& e) {
+    } catch (const std::exception &e) {
         if (!is_running) {
             exit_code = EXIT_SUCCESS;
         } else {

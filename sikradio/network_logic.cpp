@@ -12,29 +12,30 @@
 #include <chrono>
 #include <iomanip>
 #include <sstream>
-#include <arpa/inet.h> 
+#include <arpa/inet.h>
 
 using AddrInfoPtr = std::unique_ptr<struct addrinfo, decltype(&freeaddrinfo)>;
 
-static void log_connection_attempt(const struct addrinfo* rp, const int verbosity) {
+static void log_connection_attempt(const struct addrinfo *rp, const int verbosity) {
     char ip_str[INET6_ADDRSTRLEN] = {0};
     uint16_t port = 0;
 
     if (rp->ai_family == AF_INET) {
-        auto* ipv4 = reinterpret_cast<struct sockaddr_in*>(rp->ai_addr);
+        auto *ipv4 = reinterpret_cast<struct sockaddr_in *>(rp->ai_addr);
         inet_ntop(AF_INET, &(ipv4->sin_addr), ip_str, sizeof(ip_str));
         port = ntohs(ipv4->sin_port);
-        
+
         // format ipv4
-        log_message(verbosity, VerbosityLevel::COMMON, "connecting to server " + std::string(ip_str) + ":" + std::to_string(port));
-        
+        log_message(verbosity, VerbosityLevel::COMMON,
+                    "connecting to server " + std::string(ip_str) + ":" + std::to_string(port));
     } else if (rp->ai_family == AF_INET6) {
-        auto* ipv6 = reinterpret_cast<struct sockaddr_in6*>(rp->ai_addr);
+        auto *ipv6 = reinterpret_cast<struct sockaddr_in6 *>(rp->ai_addr);
         inet_ntop(AF_INET6, &(ipv6->sin6_addr), ip_str, sizeof(ip_str));
         port = ntohs(ipv6->sin6_port);
-        
+
         // format ipv6
-        log_message(verbosity, VerbosityLevel::COMMON, "connecting to server [" + std::string(ip_str) + "]:" + std::to_string(port));
+        log_message(verbosity, VerbosityLevel::COMMON,
+                    "connecting to server [" + std::string(ip_str) + "]:" + std::to_string(port));
     }
 }
 
@@ -42,7 +43,7 @@ static void log_connection_attempt(const struct addrinfo* rp, const int verbosit
  * @brief Resolves the hostname into a list of available IP addresses. If provided, takes into account configuration
  * preferences (IPv4 / IPv6) and returns a smart pointer managing memory allocated by getaddrinfo.
  */
-static AddrInfoPtr resolve_hostname(const ParsedURL& parsed_url, const ClientConfig& config) {
+static AddrInfoPtr resolve_hostname(const ParsedURL &parsed_url, const ClientConfig &config) {
     log_message(config.verbosity, VerbosityLevel::COMMON, "resolving name " + parsed_url.hostname, true);
 
     struct addrinfo hints = {};
@@ -58,7 +59,8 @@ static AddrInfoPtr resolve_hostname(const ParsedURL& parsed_url, const ClientCon
         hints.ai_family = AF_UNSPEC;
     }
 
-    log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### IP version: " + std::to_string(hints.ai_family));
+    log_message(config.verbosity, VerbosityLevel::DEBUG,
+                "####DEBUG#### IP version: " + std::to_string(hints.ai_family));
 
     struct addrinfo *raw_result = nullptr;
     int errcode = getaddrinfo(parsed_url.hostname.c_str(), parsed_url.port_str.c_str(), &hints, &raw_result);
@@ -73,7 +75,7 @@ static AddrInfoPtr resolve_hostname(const ParsedURL& parsed_url, const ClientCon
     }
 
     log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### getaddrinfo returned " +
-        std::to_string(addr_count) + " address(es)");
+                                                         std::to_string(addr_count) + " address(es)");
 
     AddrInfoPtr result(raw_result, &freeaddrinfo);
     return result;
@@ -84,7 +86,7 @@ static AddrInfoPtr resolve_hostname(const ParsedURL& parsed_url, const ClientCon
  * Returns the file descriptor of the first successfully connected socket,  or throws an exception if all connection
  * attempts fail.
  */
-static int connect_to_the_first_working_address(const struct addrinfo* addresses, const int verbosity) {
+static int connect_to_the_first_working_address(const struct addrinfo *addresses, const int verbosity) {
     int socket_fd = -1;
 
     for (auto rp = addresses; rp != nullptr; rp = rp->ai_next) {
@@ -97,10 +99,11 @@ static int connect_to_the_first_working_address(const struct addrinfo* addresses
             continue;
         }
 
-        log_message(verbosity, VerbosityLevel::DEBUG,"####DEBUG#### socket created: fd=" + std::to_string(socket_fd));
+        log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### socket created: fd=" + std::to_string(socket_fd));
 
         if (connect(socket_fd, rp->ai_addr, rp->ai_addrlen) == 0) {
-            log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### connect succeeded: fd=" + std::to_string(socket_fd));
+            log_message(verbosity, VerbosityLevel::DEBUG,
+                        "####DEBUG#### connect succeeded: fd=" + std::to_string(socket_fd));
             break;
         }
 
@@ -130,7 +133,7 @@ static void configure_socket_timeout(const int socket_fd, const uint32_t timeout
     log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### socket receive timeout set");
 }
 
-std::unique_ptr<IStream> connect_to_server(const ParsedURL& parsed_url, const ClientConfig& config) {
+std::unique_ptr<IStream> connect_to_server(const ParsedURL &parsed_url, const ClientConfig &config) {
     AddrInfoPtr const resolved_address = resolve_hostname(parsed_url, config);
 
     int const socket_fd = connect_to_the_first_working_address(resolved_address.get(), config.verbosity);

@@ -13,9 +13,9 @@ public:
 
     ~TcpStream() override;
 
-    ssize_t read(void* buffer, size_t count) override;
+    ssize_t read(void *buffer, size_t count) override;
 
-    ssize_t write(const void* buf, size_t count) override;
+    ssize_t write(const void *buf, size_t count) override;
 
     void close() override;
 

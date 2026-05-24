@@ -12,4 +12,5 @@ enum class VerbosityLevel {
 
 std::string get_current_timestamp();
 
-void log_message(int current_verbosity, VerbosityLevel target_level, const std::string& msg, bool prepend_timestamp = false);
+void log_message(int current_verbosity, VerbosityLevel target_level, const std::string &msg,
+                 bool prepend_timestamp = false);

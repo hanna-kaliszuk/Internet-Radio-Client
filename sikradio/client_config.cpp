@@ -10,9 +10,9 @@ static void print_usage(const std::string_view prog_name) {
     std::cerr << "usage: " << prog_name << " -u <URL> [-4] [-6] [-t <timeout>] [-m] [-v <level>] [-q]\n";
 }
 
-ClientConfig parse_arguments(int argc, char* argv[]) {
-    ClientConfig config; 
-    int opt; 
+ClientConfig parse_arguments(int argc, char *argv[]) {
+    ClientConfig config;
+    int opt;
 
     // to track duplicates 
     bool seen_u = false, seen_4 = false, seen_6 = false;
@@ -23,8 +23,8 @@ ClientConfig parse_arguments(int argc, char* argv[]) {
             case 'u':
                 if (seen_u) throw std::invalid_argument("parameter '-u' provided multiple times.");
 
-                seen_u = true; 
-                config.server_url = optarg; 
+                seen_u = true;
+                config.server_url = optarg;
                 break;
 
             case 'm':
@@ -57,14 +57,14 @@ ClientConfig parse_arguments(int argc, char* argv[]) {
             case '4':
                 if (seen_4) throw std::invalid_argument("parameter '-4' provided multiple times");
 
-                seen_4 = true; 
+                seen_4 = true;
                 config.force_ipv4 = true;
                 break;
 
             case '6':
                 if (seen_6) throw std::invalid_argument("parameter '-6' provided multiple times");
 
-                seen_6 = true; 
+                seen_6 = true;
                 config.force_ipv6 = true;
                 break;
 
@@ -94,7 +94,7 @@ ClientConfig parse_arguments(int argc, char* argv[]) {
                 seen_q = true;
                 config.verbosity = 0;
                 break;
-            
+
             case '?':
             default:
                 print_usage(argv[0]);
