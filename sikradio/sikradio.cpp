@@ -1,20 +1,26 @@
 #include "client_config.h"
 #include "http_logic.h"
-#include "network_logic.h"
-#include "url_parser.h"
 #include "IStream.h"
 #include "logger.h"
+#include "network_logic.h"
+#include "url_parser.h"
 
-#include <iostream>
-#include <atomic>
-#include <thread>
 #include <poll.h>
+#include <sys/socket.h>
 #include <unistd.h>
+
+
+#include <atomic>
+#include <iostream>
+#include <map>
+#include <thread>
+
 #include <openssl/ssl.h>
 #include <openssl/err.h>
-#include <sys/socket.h>
-#include <map>
 
+/**
+ * @brief Trims leading and trailing whitespaces from a string.
+ */
 static std::string trim(const std::string &s) {
     const size_t begin = s.find_first_not_of(" \t");
     if (begin == std::string::npos) {
@@ -25,6 +31,9 @@ static std::string trim(const std::string &s) {
     return s.substr(begin, end - begin + 1);
 }
 
+/**
+ * @brief Parses a raw cookie string and stores it in the cookies map.
+ */
 static void store_cookie(std::map<std::string, std::string> &cookies,
                          const std::string &cookie_pair) {
     const std::string cleaned = trim(cookie_pair);
@@ -47,6 +56,9 @@ static void store_cookie(std::map<std::string, std::string> &cookies,
     cookies[name] = value;
 }
 
+/**
+ * @brief Constructs a single Cookie header string from the map of cookies.
+ */
 static std::string build_cookie_header(const std::map<std::string, std::string> &cookies) {
     std::string result;
 
@@ -61,6 +73,9 @@ static std::string build_cookie_header(const std::map<std::string, std::string> 
     return result;
 }
 
+/**
+ * @brief Converts a StreamResult enum to its string representation (for debugging).
+ */
 static std::string stream_result_to_string(StreamResult result) {
     switch (result) {
         case StreamResult::OK:
@@ -76,11 +91,14 @@ static std::string stream_result_to_string(StreamResult result) {
     return "UNKNOWN";
 }
 
-static StreamResult handle_no_metadata(IStream &stream, std::atomic<bool> &is_running, const int verbosity) {
+/**
+ * @brief Reads audio data endlessly (without ICY demultiplexing) and writes it to stdout.
+ */
+static StreamResult handle_no_metadata(IStream &stream, const std::atomic<bool> &is_running, const int verbosity) {
     while (is_running) {
         char buffer[4096];
 
-        ssize_t bytes_read = stream.read(buffer, sizeof(buffer));
+        const ssize_t bytes_read = stream.read(buffer, sizeof(buffer));
 
         if (bytes_read < 0) {
             if (!is_running) {
@@ -126,7 +144,10 @@ static StreamResult handle_no_metadata(IStream &stream, std::atomic<bool> &is_ru
     return StreamResult::STOPPED_BY_CLIENT;
 }
 
-static StreamResult handle_metadata(IStream &stream, std::atomic<bool> &is_running, const size_t metaint,
+/**
+ * @brief Demultiplexes an ICY stream, separating audio chunks from metadata blocks.
+ */
+static StreamResult handle_metadata(IStream &stream, const std::atomic<bool> &is_running, const size_t metaint,
                                     const int verbosity) {
     char buffer[4096];
 
@@ -136,8 +157,8 @@ static StreamResult handle_metadata(IStream &stream, std::atomic<bool> &is_runni
 
     while (is_running) {
         // read only as many bytes as needed for this specific state
-        size_t chunk_size = std::min(sizeof(buffer), bytes_to_read);
-        ssize_t bytes_read = stream.read(buffer, chunk_size);
+        const size_t chunk_size = std::min(sizeof(buffer), bytes_to_read);
+        const ssize_t bytes_read = stream.read(buffer, chunk_size);
 
         if (bytes_read < 0) {
             if (!is_running) {
@@ -147,7 +168,7 @@ static StreamResult handle_metadata(IStream &stream, std::atomic<bool> &is_runni
             }
 
             if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
-                // tiemout
+                // timeout
                 log_message(verbosity, VerbosityLevel::COMMON, "data receiving timeout. trying again.");
 
                 return StreamResult::TIMEOUT;
@@ -187,8 +208,8 @@ static StreamResult handle_metadata(IStream &stream, std::atomic<bool> &is_runni
                 break;
 
             case StreamState::MULTIPLIER: {
-                unsigned char k = static_cast<unsigned char>(buffer[0]);
-                size_t metadata_length = k * 16;
+                const unsigned char k = static_cast<unsigned char>(buffer[0]);
+                const size_t metadata_length = k * 16;
 
                 log_message(verbosity, VerbosityLevel::DEBUG,
                             "####DEBUG#### metadata block: k=" + std::to_string(k) + " length=" + std::to_string(
@@ -241,6 +262,9 @@ static StreamResult handle_metadata(IStream &stream, std::atomic<bool> &is_runni
     return StreamResult::STOPPED_BY_CLIENT;
 }
 
+/**
+ * @brief Routes to the correct streaming strategy based on metaint parameter.
+ */
 static StreamResult listen_to_music(IStream &stream, std::atomic<bool> &is_running, const size_t metaint,
                                     const int verbosity) {
     if (metaint == 0) {
@@ -255,6 +279,9 @@ static StreamResult listen_to_music(IStream &stream, std::atomic<bool> &is_runni
     return handle_metadata(stream, is_running, metaint, verbosity);
 }
 
+/**
+ * @brief Initializes the global OpenSSL environment context.
+ */
 static void initialize_open_ssl() {
     SSL_library_init();
     SSL_load_error_strings();
@@ -266,6 +293,7 @@ int main(int argc, char *argv[]) {
     std::atomic<bool> is_running{true};
     std::atomic<int> current_fd{-1};
 
+    // a thread dedicated to monitoring STDIN for the "quit\n" sequence
     std::thread input_thread([&is_running, &current_fd]() {
         struct pollfd pfd;
         pfd.fd = STDIN_FILENO;
@@ -277,7 +305,7 @@ int main(int argc, char *argv[]) {
         while (is_running) {
             pfd.revents = 0;
 
-            int ret = poll(&pfd, 1, 100);
+            const int ret = poll(&pfd, 1, 100);
 
             if (ret < 0) {
                 if (errno == EINTR) {
@@ -290,10 +318,11 @@ int main(int argc, char *argv[]) {
                 continue;
             }
 
+            // read available data before breaking
             if (pfd.revents & POLLIN) {
                 char buffer[128];
 
-                ssize_t bytes_read = read(STDIN_FILENO, buffer, sizeof(buffer));
+                const ssize_t bytes_read = read(STDIN_FILENO, buffer, sizeof(buffer));
 
                 if (bytes_read < 0) {
                     if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -358,7 +387,7 @@ int main(int argc, char *argv[]) {
                 throw std::runtime_error("invalid URL format: " + current_url);
             }
 
-            ParsedURL const parsed_url = parsed_opt.value();
+            const ParsedURL parsed_url = parsed_opt.value();
 
             log_message(
                 config.verbosity, VerbosityLevel::DEBUG,
@@ -372,7 +401,7 @@ int main(int argc, char *argv[]) {
 
             send_http_request(*stream, parsed_url, config, build_cookie_header(current_cookies));
 
-            HeaderReadResult header_result = server_response_to_text(*stream, config.verbosity);
+            const HeaderReadResult header_result = server_response_to_text(*stream, config.verbosity);
 
             if (header_result.result == StreamResult::TIMEOUT) {
                 log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### header read result: TIMEOUT");
@@ -403,9 +432,9 @@ int main(int argc, char *argv[]) {
             }
 
             if (response_data.status_code == 200) {
-                size_t metaint = config.request_metadata ? response_data.icy_metaint : 0;
+                const size_t metaint = config.request_metadata ? response_data.icy_metaint : 0;
 
-                StreamResult stream_result = listen_to_music(*stream, is_running, metaint, config.verbosity);
+                const StreamResult stream_result = listen_to_music(*stream, is_running, metaint, config.verbosity);
                 log_message(config.verbosity, VerbosityLevel::DEBUG,
                             "####DEBUG#### listen_to_music result: " + stream_result_to_string(stream_result));
 
@@ -454,8 +483,7 @@ int main(int argc, char *argv[]) {
                 log_message(config.verbosity, VerbosityLevel::COMMON, "redirecting to " + current_url, true);
                 continue;
             } else {
-                // TODO: zmien to
-                throw std::runtime_error("unsuported status code " + std::to_string(response_data.status_code));
+                throw std::runtime_error("unsupported status code " + std::to_string(response_data.status_code));
             }
         }
     } catch (const std::invalid_argument &e) {
@@ -472,7 +500,7 @@ int main(int argc, char *argv[]) {
         } else {
             is_running = false;
 
-            if (config.verbosity >= 2) {
+            if (config.verbosity >= static_cast<int>(VerbosityLevel::CRITICAL)) {
                 std::cerr << get_current_timestamp() << "\n";
                 std::cerr << "CRITICAL ERROR: " << e.what() << std::endl;
             }
@@ -483,7 +511,7 @@ int main(int argc, char *argv[]) {
 
     is_running = false;
 
-    int fd = current_fd.load();
+    const int fd = current_fd.load();
     if (fd != -1) {
         shutdown(fd, SHUT_RDWR);
     }

@@ -1,10 +1,17 @@
 #include "tls_stream.h"
-#include <openssl/err.h>
-#include <stdexcept>
-#include <unistd.h>
-#include <iostream>
-#include <cerrno>
 
+#include <unistd.h>
+#include <cerrno>
+#include <iostream>
+#include <stdexcept>
+
+#include <openssl/err.h>
+
+/**
+ * @brief Constructs a new TLS Stream over an existing socket descriptor.
+ * @param fd The raw TCP socket descriptor.
+ * @param hostname The target server hostname (for SNI).
+ */
 TlsStream::TlsStream(int fd, const std::string &hostname) : socket_fd(fd), ctx(nullptr), ssl(nullptr) {
     // tsl method for client
     const SSL_METHOD *method = TLS_client_method();
@@ -33,10 +40,16 @@ TlsStream::TlsStream(int fd, const std::string &hostname) : socket_fd(fd), ctx(n
     }
 }
 
+/**
+ * @brief Destructor ensures TLS teardown and socket closure.
+ */
 TlsStream::~TlsStream() {
     close();
 }
 
+/**
+ * @brief Reads encrypted payload from the socket via OpenSSL.
+ */
 ssize_t TlsStream::read(void *buffer, size_t count) {
     if (!ssl) {
         errno = EBADF;
@@ -75,6 +88,9 @@ ssize_t TlsStream::read(void *buffer, size_t count) {
     }
 }
 
+/**
+ * @brief Writes encrypted payload to the socket via OpenSSL.
+ */
 ssize_t TlsStream::write(const void *buffer, size_t count) {
     if (!ssl) {
         errno = EBADF;
@@ -113,6 +129,9 @@ ssize_t TlsStream::write(const void *buffer, size_t count) {
     }
 }
 
+/**
+ * @brief Gracefully terminates the TLS session and closes the TCP socket.
+ */
 void TlsStream::close() {
     if (ssl) {
         int result = SSL_shutdown(ssl);
@@ -136,6 +155,9 @@ void TlsStream::close() {
     }
 }
 
+/**
+ * @brief Retrieves the raw file descriptor for multiplexing (e.g., poll/select).
+ */
 int TlsStream::get_fd() const {
     return socket_fd;
 }

@@ -1,20 +1,32 @@
 #include "client_config.h"
+#include "logger.h"
+
+#include <unistd.h>
 
 #include <iostream>
 #include <stdexcept>
 #include <string_view>
-#include <unistd.h>
 
-// helper fo print usage instructions.
+/**
+ * @brief Prints the program usage instructions to standard error.
+ * @param prog_name The name of the executable (usually argv[0]).
+ */
 static void print_usage(const std::string_view prog_name) {
     std::cerr << "usage: " << prog_name << " -u <URL> [-4] [-6] [-t <timeout>] [-m] [-v <level>] [-q]\n";
 }
 
+/**
+ * @brief Parses command-line arguments and populates the ClientConfig struct.
+ * @param argc Argument count.
+ * @param argv Argument vector.
+ * @return A fully populated ClientConfig object.
+ * @throws std::invalid_argument if parameters are invalid, duplicated, or missing.
+ */
 ClientConfig parse_arguments(int argc, char *argv[]) {
     ClientConfig config;
     int opt;
 
-    // to track duplicates 
+    // track duplicates
     bool seen_u = false, seen_4 = false, seen_6 = false;
     bool seen_t = false, seen_m = false, seen_v = false, seen_q = false;
 
@@ -92,7 +104,7 @@ ClientConfig parse_arguments(int argc, char *argv[]) {
                 if (seen_q)throw std::invalid_argument("parameter '-q' provided multiple times");
 
                 seen_q = true;
-                config.verbosity = 0;
+                config.verbosity = static_cast<int>(VerbosityLevel::NONE);
                 break;
 
             case '?':

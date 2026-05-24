@@ -1,21 +1,25 @@
 #include "network_logic.h"
-#include "tcp_stream.h"
-#include "tls_stream.h"
-#include "IStream.h"
-#include "logger.h"
 
-#include <sys/socket.h>
+#include <arpa/inet.h>
 #include <netdb.h>
-#include <iostream>
-#include <memory>
+#include <sys/socket.h>
 
 #include <chrono>
 #include <iomanip>
-#include <sstream>
-#include <arpa/inet.h>
+#include <memory>
+
+#include "IStream.h"
+#include "logger.h"
+#include "tcp_stream.h"
+#include "tls_stream.h"
 
 using AddrInfoPtr = std::unique_ptr<struct addrinfo, decltype(&freeaddrinfo)>;
 
+/**
+ * @brief Logs an attempt to connect to a resolved IP address.
+ * @param rp Pointer to the addrinfo structure containing the address.
+ * @param verbosity The configured verbosity level.
+ */
 static void log_connection_attempt(const struct addrinfo *rp, const int verbosity) {
     char ip_str[INET6_ADDRSTRLEN] = {0};
     uint16_t port = 0;
@@ -40,8 +44,8 @@ static void log_connection_attempt(const struct addrinfo *rp, const int verbosit
 }
 
 /**
- * @brief Resolves the hostname into a list of available IP addresses. If provided, takes into account configuration
- * preferences (IPv4 / IPv6) and returns a smart pointer managing memory allocated by getaddrinfo.
+ * @brief Resolves the hostname into a list of available IP addresses.
+ * Takes into account configuration preferences (IPv4 / IPv6) and returns a smart pointer.
  */
 static AddrInfoPtr resolve_hostname(const ParsedURL &parsed_url, const ClientConfig &config) {
     log_message(config.verbosity, VerbosityLevel::COMMON, "resolving name " + parsed_url.hostname, true);
@@ -83,8 +87,7 @@ static AddrInfoPtr resolve_hostname(const ParsedURL &parsed_url, const ClientCon
 
 /**
  * @brief Iterates through the list of IP addresses and attempts to establish a TCP connection.
- * Returns the file descriptor of the first successfully connected socket,  or throws an exception if all connection
- * attempts fail.
+ * @return The file descriptor of the first successfully connected socket, or throws on failure.
  */
 static int connect_to_the_first_working_address(const struct addrinfo *addresses, const int verbosity) {
     int socket_fd = -1;
@@ -120,6 +123,9 @@ static int connect_to_the_first_working_address(const struct addrinfo *addresses
     return socket_fd;
 }
 
+/**
+ * @brief Sets the SO_RCVTIMEO option on the socket for reading timeouts.
+ */
 static void configure_socket_timeout(const int socket_fd, const uint32_t timeout, const int verbosity) {
     struct timeval tv = {};
     tv.tv_sec = static_cast<time_t>(timeout / 1000);

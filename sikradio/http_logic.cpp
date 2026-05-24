@@ -1,11 +1,18 @@
 #include "http_logic.h"
-#include "logger.h"
 
 #include <algorithm>
-#include <unistd.h>
 #include <iostream>
 #include <sstream>
 
+#include "logger.h"
+
+/**
+ * @brief Guarantees that all bytes of the request are written to the stream.
+ * @param stream The connection stream.
+ * @param data Pointer to the buffer.
+ * @param length Number of bytes to write.
+ * @param verbosity Configured verbosity level for logging.
+ */
 static void write_all(IStream &stream, const char *data, size_t length, const int verbosity) {
     size_t written_total = 0;
 
@@ -32,12 +39,14 @@ static void write_all(IStream &stream, const char *data, size_t length, const in
     }
 }
 
+/**
+ * @brief Parses HTTP headers specifically for a 200 OK response (extracts icy-metaint).
+ */
 static void handle_200_ok(std::istringstream &stream, HttpResponseData &response, const int verbosity) {
     std::string current_line;
 
     while (std::getline(stream, current_line)) {
         if (!current_line.empty() && current_line.back() == '\r') {
-            // delete '\r'
             current_line.pop_back();
         }
 
@@ -46,7 +55,7 @@ static void handle_200_ok(std::istringstream &stream, HttpResponseData &response
             break;
         }
 
-        size_t colon_pos = current_line.find(':');
+        const size_t colon_pos = current_line.find(':');
         if (colon_pos == std::string::npos) {
             // malformed header (according to the http standard)
             log_message(verbosity, VerbosityLevel::NON_CRITICAL, "malformed HTTP header ignored.");
@@ -56,7 +65,7 @@ static void handle_200_ok(std::istringstream &stream, HttpResponseData &response
         std::string key = current_line.substr(0, colon_pos);
         std::string value = current_line.substr(colon_pos + 1);
 
-        // case insensivity on the key
+        // case insensitivity on the key
         std::transform(key.begin(), key.end(), key.begin(), ::tolower);
 
         if (key == "icy-metaint") {
@@ -81,6 +90,9 @@ static void handle_200_ok(std::istringstream &stream, HttpResponseData &response
     }
 }
 
+/**
+ * @brief Parses HTTP headers specifically for a 3xx Redirect response (extracts Location and Set-Cookie).
+ */
 static void handle_redirect(std::istringstream &stream, HttpResponseData &response, const int verbosity) {
     std::string current_line;
 
@@ -93,7 +105,7 @@ static void handle_redirect(std::istringstream &stream, HttpResponseData &respon
             break;
         }
 
-        size_t colon_pos = current_line.find(':');
+        const size_t colon_pos = current_line.find(':');
         if (colon_pos == std::string::npos) {
             // malformed header (according to the http standard)
             log_message(verbosity, VerbosityLevel::NON_CRITICAL, "malformed HTTP header ignored.");
@@ -103,7 +115,7 @@ static void handle_redirect(std::istringstream &stream, HttpResponseData &respon
         std::string key = current_line.substr(0, colon_pos);
         std::string value = current_line.substr(colon_pos + 1);
 
-        // case insensivity on the key
+        // case insensitivity on the key
         std::transform(key.begin(), key.end(), key.begin(), ::tolower);
 
         if (key == "location") {
@@ -154,6 +166,7 @@ std::string build_http_request(const ParsedURL &parsed_url, const ClientConfig &
     std::string request = "GET " + parsed_url.path + " HTTP/1.1\r\n";
 
     std::string host_header = parsed_url.hostname;
+    // add brackets for ipv6
     if (host_header.find(':') != std::string::npos && !(
             host_header.size() >= 2 && host_header.front() == '[' && host_header.back() == ']')) {
         host_header = "[" + host_header + "]";
@@ -184,20 +197,15 @@ void send_http_request(IStream &stream, const ParsedURL &parsed_url, const Clien
     log_message(config.verbosity, VerbosityLevel::COMMON, request);
 }
 
-// wczytuje to co wyslal serwer bit po bicie az do dojscia do \r\n\r\n
 HeaderReadResult server_response_to_text(IStream &stream, const int verbosity) {
-    static constexpr size_t MAX_HEADERS_SIZE = 64 * 1024;
-    // zeby czytanie kiedys sie zatrzymalo jakby byl zlosliwy serwer
-
+    static constexpr size_t MAX_HEADERS_SIZE = 64 * 1024; // prevent infinite loops
     char c;
-
     std::string received_text;
 
     while (true) {
         ssize_t bytes_read = stream.read(&c, 1);
 
         if (bytes_read > 0) {
-            // read a letter
             received_text += c;
 
             if (received_text.size() > MAX_HEADERS_SIZE) {
@@ -217,7 +225,6 @@ HeaderReadResult server_response_to_text(IStream &stream, const int verbosity) {
 
             return HeaderReadResult{StreamResult::CLOSED_BY_SERVER, ""};
         } else {
-            // bytes read < 0 => check errno
             if (errno == EAGAIN || errno == EWOULDBLOCK) {
                 // timeout
                 log_message(verbosity, VerbosityLevel::NON_CRITICAL, "timeout waiting for server response.");

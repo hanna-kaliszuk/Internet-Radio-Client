@@ -1,5 +1,10 @@
 #include "url_parser.h"
 
+/**
+ * @brief Verifies if the provided port string is a valid numeric port (1-65535).
+ * @param port The port candidate string.
+ * @return True if valid, false otherwise.
+ */
 static bool is_valid_port(const std::string &port) {
     if (port.empty()) {
         return false;
@@ -13,7 +18,7 @@ static bool is_valid_port(const std::string &port) {
 
     try {
         size_t pos = 0;
-        int value = std::stoi(port, &pos);
+        const int value = std::stoi(port, &pos);
 
         return pos == port.size() && value >= 1 && value <= 65535;
     } catch (...) {
@@ -21,6 +26,11 @@ static bool is_valid_port(const std::string &port) {
     }
 }
 
+/**
+ * @brief Parses a full URL string into its protocol, host, port, and path components.
+ * @param url The raw URL string provided by the user.
+ * @return std::optional containing ParsedURL struct on success, nullopt on format failure.
+ */
 std::optional<ParsedURL> parseUrl(const std::string &url) {
     ParsedURL result;
 
@@ -42,7 +52,7 @@ std::optional<ParsedURL> parseUrl(const std::string &url) {
 
     // find the path
     // default: '/'
-    size_t const slash_position = url.find('/', offset);
+    const size_t slash_position = url.find('/', offset);
     std::string host_buffer;
 
     if (slash_position != std::string::npos) {
@@ -55,14 +65,14 @@ std::optional<ParsedURL> parseUrl(const std::string &url) {
         host_buffer = url.substr(offset);
     }
 
-    size_t const hash_position = result.path.find('#');
+    const size_t hash_position = result.path.find('#');
     if (hash_position != std::string::npos) {
         result.path = result.path.substr(0, hash_position);
     }
 
     // check if there is a unusual port specified (number after the last ':')
-    size_t const colon_position = host_buffer.rfind(':');
-    size_t const bracket_position = host_buffer.rfind(']');
+    const size_t colon_position = host_buffer.rfind(':');
+    const size_t bracket_position = host_buffer.rfind(']');
 
     if (colon_position != std::string::npos &&
         (bracket_position == std::string::npos || colon_position > bracket_position)) {
