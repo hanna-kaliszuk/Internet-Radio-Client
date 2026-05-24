@@ -23,6 +23,6 @@ void TcpStream::close() {
     }
 }
 
-int TcpStream::get_fd() {
+int TcpStream::get_fd() const {
     return socket_fd;
 }

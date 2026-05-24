@@ -113,47 +113,57 @@ static void handle_redirect(std::istringstream& stream, HttpResponseData& respon
                 log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### redirect Location parsed: " + response.new_location);
             }
         } else if (key == "set-cookie") {
-            const size_t first_non_space = value.find_first_not_of(' ');
-            const size_t semicolon_pos = value.find_first_of(';');
+            const size_t first_non_space = value.find_first_not_of(" \t");
+            const size_t semicolon_pos = value.find(';', first_non_space);
 
             if (first_non_space == std::string::npos) {
-                // no cookies found
-                    log_message(verbosity, VerbosityLevel::NON_CRITICAL,"empty Set-Cookie header ignored.");
-                    continue;
+                log_message(verbosity, VerbosityLevel::NON_CRITICAL,
+                            "empty Set-Cookie header ignored.");
+                continue;
             }
 
             std::string cookie_value;
             if (semicolon_pos == std::string::npos) {
-                cookie_value = value.substr((first_non_space));
+                cookie_value = value.substr(first_non_space);
             } else {
-                cookie_value = value.substr(first_non_space, semicolon_pos - first_non_space);
+                cookie_value = value.substr(first_non_space,
+                                            semicolon_pos - first_non_space);
+            }
+
+            const size_t last_non_space = cookie_value.find_last_not_of(" \t");
+            if (last_non_space != std::string::npos) {
+                cookie_value = cookie_value.substr(0, last_non_space + 1);
             }
 
             if (!cookie_value.empty()) {
-                if (!response.cookie.empty()) {
-                    response.cookie += "; ";
-                }
-
-                response.cookie += cookie_value;
+                response.cookies.push_back(cookie_value);
             }
 
-            log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### cookie parsed;")
+            log_message(verbosity, VerbosityLevel::DEBUG,
+                        "####DEBUG#### cookie parsed");
+            }
+
+            log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### cookie parsed");
         }
-    }
 }
 
 std::string build_http_request(const ParsedURL& parsed_url, const ClientConfig& config, const std::string& current_cookie) {
     std::string request = "GET " + parsed_url.path + " HTTP/1.1\r\n";
-    request += "Host: " + parsed_url.hostname + "\r\n";
-    request += "Connection: Keep-Alive\r\n";
 
-    if (!current_cookie.empty()) {
-        // if there is a required cookie
-        request += "Cookie: " + current_cookie + "\r\n";
+    std::string host_header = parsed_url.hostname;
+    if (host_header.find(':') != std::string::npos && !(host_header.size() >= 2 && host_header.front() == '[' && host_header.back() == ']')) {
+        host_header = "[" + host_header + "]";
     }
+
+    request += "Host: " + host_header + "\r\n";
+    request += "Connection: Keep-Alive\r\n";
 
     if (config.request_metadata) {
         request += "Icy-MetaData: 1\r\n";
+    }
+
+    if (!current_cookie.empty()) {
+        request += "Cookie: " + current_cookie + "\r\n";
     }
 
     request += "\r\n";
@@ -193,6 +203,10 @@ HeaderReadResult server_response_to_text(IStream& stream, const int verbosity) {
                 return HeaderReadResult{StreamResult::OK, received_text};
             }
         } else if (bytes_read == 0) {
+            if (!received_text.empty()) {
+                throw std::runtime_error("incomplete HTTP headers");
+            }
+
             return HeaderReadResult{StreamResult::CLOSED_BY_SERVER, ""};
         } else {
             // bytes read < 0 => check errno
@@ -236,17 +250,12 @@ std::optional<HttpResponseData> process_http_response(const std::string &headers
 
     log_message(verbosity, VerbosityLevel::DEBUG,"####DEBUG#### HTTP status parsed: protocol=" + protocol + " status=" + std::to_string(response.status_code));
 
-    switch (response.status_code) {
-        case 200:
-            handle_200_ok(main_stream, response, verbosity);
-            break;
-        case 301:
-        case 302:
-            handle_redirect(main_stream, response, verbosity);
-            break;
-        default:
-            response.critical_error = true;
-            break;
+    if (response.status_code == 200) {
+        handle_200_ok(main_stream, response, verbosity);
+    } else if (response.status_code >= 300 && response.status_code < 400) {
+        handle_redirect(main_stream, response, verbosity);
+    } else {
+        response.critical_error = true;
     }
 
     return response;

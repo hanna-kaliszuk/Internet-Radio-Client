@@ -136,6 +136,6 @@ void TlsStream::close() {
     }
 }
 
-int TlsStream::get_fd() {
+int TlsStream::get_fd() const {
     return socket_fd;
 }

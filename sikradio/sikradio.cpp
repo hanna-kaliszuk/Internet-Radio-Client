@@ -13,6 +13,53 @@
 #include <openssl/ssl.h>
 #include <openssl/err.h>
 #include <sys/socket.h>
+#include <map>
+
+static std::string trim(const std::string& s) {
+    const size_t begin = s.find_first_not_of(" \t");
+    if (begin == std::string::npos) {
+        return "";
+    }
+
+    const size_t end = s.find_last_not_of(" \t");
+    return s.substr(begin, end - begin + 1);
+}
+
+static void store_cookie(std::map<std::string, std::string>& cookies,
+                         const std::string& cookie_pair) {
+    const std::string cleaned = trim(cookie_pair);
+    if (cleaned.empty()) {
+        return;
+    }
+
+    const size_t eq_pos = cleaned.find('=');
+    if (eq_pos == std::string::npos) {
+        return;
+    }
+
+    const std::string name = trim(cleaned.substr(0, eq_pos));
+    const std::string value = trim(cleaned.substr(eq_pos + 1));
+
+    if (name.empty()) {
+        return;
+    }
+
+    cookies[name] = value;
+}
+
+static std::string build_cookie_header(const std::map<std::string, std::string>& cookies) {
+    std::string result;
+
+    for (const auto& [name, value] : cookies) {
+        if (!result.empty()) {
+            result += "; ";
+        }
+
+        result += name + "=" + value;
+    }
+
+    return result;
+}
 
 static std::string stream_result_to_string(StreamResult result) {
     switch (result) {
@@ -36,9 +83,9 @@ static StreamResult handle_no_metadata(IStream& stream, std::atomic<bool>& is_ru
         ssize_t bytes_read = stream.read(buffer, sizeof(buffer));
 
         if (bytes_read < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
                 // timeout
-                log_message(verbosity, VerbosityLevel::NON_CRITICAL, "timeout: no data received. reconnecting...");
+                log_message(verbosity, VerbosityLevel::COMMON, "data receiving timeout. trying again.");
 
                 return StreamResult::TIMEOUT;
             }
@@ -79,9 +126,9 @@ static StreamResult handle_metadata(IStream& stream, std::atomic<bool>& is_runni
         ssize_t bytes_read = stream.read(buffer, chunk_size);
 
         if (bytes_read < 0) {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
                 // tiemout
-                log_message(verbosity, VerbosityLevel::NON_CRITICAL, "timeout: no data received. reconnecting...");
+                log_message(verbosity, VerbosityLevel::COMMON, "data receiving timeout. trying again.");
 
                 return StreamResult::TIMEOUT;
             }
@@ -231,7 +278,7 @@ int main(int argc, char* argv[]) {
         );
 
         std::string current_url = config.server_url;
-        std::string current_cookie = "";
+        std::map<std::string, std::string> current_cookies;
 
         std::unique_ptr<IStream> stream;
 
@@ -253,12 +300,15 @@ int main(int argc, char* argv[]) {
 
             stream = connect_to_server(parsed_url, config);
 
-            send_http_request(*stream, parsed_url, config, current_cookie);
+            send_http_request(*stream, parsed_url, config, build_cookie_header(current_cookies));
 
             HeaderReadResult header_result = server_response_to_text(*stream, config.verbosity);
 
             if (header_result.result == StreamResult::TIMEOUT) {
                 log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### header read result: TIMEOUT");
+                stream->close();
+                current_url = config.server_url;
+                current_cookies.clear();
                 continue;
             }
 
@@ -281,17 +331,24 @@ int main(int argc, char* argv[]) {
             }
 
             if (response_data.status_code == 200) {
-                StreamResult stream_result = listen_to_music(*stream, is_running, response_data.icy_metaint, config.verbosity);
+                size_t metaint = config.request_metadata ? response_data.icy_metaint : 0;
+
+                StreamResult stream_result = listen_to_music(*stream, is_running, metaint, config.verbosity);
                 log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### listen_to_music result: " + stream_result_to_string(stream_result));
 
                 if (stream_result == StreamResult::TIMEOUT) {
+                    stream -> close();
+
+                    current_url = config.server_url;
+                    current_cookies.clear();
+
                     continue;
                 }
 
                 if (stream_result == StreamResult::CLOSED_BY_SERVER || stream_result == StreamResult::STOPPED_BY_CLIENT) {
                     break;
                 }
-            } else if (response_data.status_code == 301 || response_data.status_code == 302) {
+            } else if (response_data.status_code >= 300 && response_data.status_code < 400) {
                 // redirect
                 if (response_data.new_location.empty()) {
                     throw std::runtime_error("client redirected to nonexistent location");
@@ -300,14 +357,13 @@ int main(int argc, char* argv[]) {
                 current_url = response_data.new_location;
                 log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### current_url updated to: " + current_url);
 
-                if (!response_data.cookie.empty()) {
-                    if (!current_cookie.empty()) {
-                        current_cookie += "; ";
-                    }
+                for (const std::string& cookie : response_data.cookies) {
+                    store_cookie(current_cookies, cookie);
+                }
 
-                    current_cookie += response_data.cookie;
-
-                    log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### current_cookie updated");
+                if (!response_data.cookies.empty()) {
+                    log_message(config.verbosity, VerbosityLevel::DEBUG,
+                                "####DEBUG#### current cookies updated");
                 }
 
                 log_message(config.verbosity, VerbosityLevel::COMMON, "redirecting to " + current_url, true);

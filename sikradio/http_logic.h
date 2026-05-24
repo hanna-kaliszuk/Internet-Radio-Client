@@ -3,11 +3,12 @@
 #include <string>
 #include "client_config.h"
 #include "network_logic.h"
+#include <vector>
 
 struct HttpResponseData {
     int status_code = 0;
     std::string new_location;
-    std::string cookie;
+    std::vector<std::string> cookies;
     size_t icy_metaint = 0;
     bool critical_error = false;
 };

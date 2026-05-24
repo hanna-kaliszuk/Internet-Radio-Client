@@ -117,10 +117,25 @@ static int connect_to_the_first_working_address(const struct addrinfo* addresses
     return socket_fd;
 }
 
+static void configure_socket_timeout(const int socket_fd, const uint32_t timeout, const int verbosity) {
+    struct timeval tv = {};
+    tv.tv_sec = static_cast<time_t>(timeout / 1000);
+    tv.tv_usec = static_cast<suseconds_t>((timeout % 1000) * 1000);
+
+    if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1) {
+        close(socket_fd);
+        throw std::runtime_error("failed to set socket receive timeout");
+    }
+
+    log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### socket receive timeout set");
+}
+
 std::unique_ptr<IStream> connect_to_server(const ParsedURL& parsed_url, const ClientConfig& config) {
     AddrInfoPtr const resolved_address = resolve_hostname(parsed_url, config);
 
     int const socket_fd = connect_to_the_first_working_address(resolved_address.get(), config.verbosity);
+
+    configure_socket_timeout(socket_fd, config.timeout, config.verbosity);
 
     if (parsed_url.protocol == Protocol::HTTPS) {
         return std::make_unique<TlsStream>(socket_fd, parsed_url.hostname);
