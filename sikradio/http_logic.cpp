@@ -6,6 +6,13 @@
 
 #include "logger.h"
 
+namespace {
+    constexpr int HTTP_STATUS_OK = 200;
+    constexpr int HTTP_STATUS_REDIRECT_MIN = 300;
+    constexpr int HTTP_STATUS_REDIRECT_MAX = 399;
+    constexpr size_t MAX_HEADERS_SIZE = 64 * 1024; // 64 KB limit to prevent infinite loops
+}
+
 /**
  * @brief Guarantees that all bytes of the request are written to the stream.
  * @param stream The connection stream.
@@ -17,7 +24,7 @@ static void write_all(IStream &stream, const char *data, size_t length, const in
     size_t written_total = 0;
 
     while (written_total < length) {
-        ssize_t written = stream.write(data + written_total, length - written_total);
+        const ssize_t written = stream.write(data + written_total, length - written_total);
 
         if (written < 0) {
             if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
@@ -190,7 +197,7 @@ std::string build_http_request(const ParsedURL &parsed_url, const ClientConfig &
 
 void send_http_request(IStream &stream, const ParsedURL &parsed_url, const ClientConfig &config,
                        const std::string current_cookie) {
-    std::string request = build_http_request(parsed_url, config, current_cookie);
+    const std::string request = build_http_request(parsed_url, config, current_cookie);
 
     write_all(stream, request.data(), request.length(), config.verbosity);
 
@@ -198,7 +205,6 @@ void send_http_request(IStream &stream, const ParsedURL &parsed_url, const Clien
 }
 
 HeaderReadResult server_response_to_text(IStream &stream, const int verbosity) {
-    static constexpr size_t MAX_HEADERS_SIZE = 64 * 1024; // prevent infinite loops
     char c;
     std::string received_text;
 
@@ -267,9 +273,9 @@ std::optional<HttpResponseData> process_http_response(const std::string &headers
                 "####DEBUG#### HTTP status parsed: protocol=" + protocol + " status=" + std::to_string(
                     response.status_code));
 
-    if (response.status_code == 200) {
+    if (response.status_code == HTTP_STATUS_OK) {
         handle_200_ok(main_stream, response, verbosity);
-    } else if (response.status_code >= 300 && response.status_code < 400) {
+    } else if (response.status_code >= HTTP_STATUS_REDIRECT_MIN && response.status_code <= HTTP_STATUS_REDIRECT_MAX) {
         handle_redirect(main_stream, response, verbosity);
     } else {
         response.critical_error = true;

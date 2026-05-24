@@ -13,6 +13,10 @@
 #include "tcp_stream.h"
 #include "tls_stream.h"
 
+namespace {
+    constexpr uint32_t MS_PER_SEC = 1000;
+}
+
 using AddrInfoPtr = std::unique_ptr<struct addrinfo, decltype(&freeaddrinfo)>;
 
 /**
@@ -128,8 +132,8 @@ static int connect_to_the_first_working_address(const struct addrinfo *addresses
  */
 static void configure_socket_timeout(const int socket_fd, const uint32_t timeout, const int verbosity) {
     struct timeval tv = {};
-    tv.tv_sec = static_cast<time_t>(timeout / 1000);
-    tv.tv_usec = static_cast<suseconds_t>((timeout % 1000) * 1000);
+    tv.tv_sec = static_cast<time_t>(timeout / MS_PER_SEC);
+    tv.tv_usec = static_cast<suseconds_t>((timeout % MS_PER_SEC) * MS_PER_SEC);
 
     if (setsockopt(socket_fd, SOL_SOCKET, SO_RCVTIMEO, &tv, sizeof(tv)) == -1) {
         close(socket_fd);

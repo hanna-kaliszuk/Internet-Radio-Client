@@ -9,7 +9,6 @@
 #include <sys/socket.h>
 #include <unistd.h>
 
-
 #include <atomic>
 #include <iostream>
 #include <map>
@@ -17,6 +16,18 @@
 
 #include <openssl/ssl.h>
 #include <openssl/err.h>
+
+namespace {
+    constexpr size_t AUDIO_BUFFER_SIZE = 4096;
+    constexpr size_t STDIN_BUFFER_SIZE = 128;
+    constexpr size_t METADATA_BLOCK_MULTIPLIER = 16;
+    constexpr size_t METADATA_LENGTH_BYTE_SIZE = 1;
+    constexpr int POLL_TIMEOUT_MS = 100;
+
+    constexpr int HTTP_STATUS_OK = 200;
+    constexpr int HTTP_STATUS_REDIRECT_MIN = 300;
+    constexpr int HTTP_STATUS_REDIRECT_MAX = 399;
+}
 
 /**
  * @brief Trims leading and trailing whitespaces from a string.
@@ -96,7 +107,7 @@ static std::string stream_result_to_string(StreamResult result) {
  */
 static StreamResult handle_no_metadata(IStream &stream, const std::atomic<bool> &is_running, const int verbosity) {
     while (is_running) {
-        char buffer[4096];
+        char buffer[AUDIO_BUFFER_SIZE];
 
         const ssize_t bytes_read = stream.read(buffer, sizeof(buffer));
 
@@ -149,7 +160,7 @@ static StreamResult handle_no_metadata(IStream &stream, const std::atomic<bool> 
  */
 static StreamResult handle_metadata(IStream &stream, const std::atomic<bool> &is_running, const size_t metaint,
                                     const int verbosity) {
-    char buffer[4096];
+    char buffer[AUDIO_BUFFER_SIZE];
 
     StreamState state = StreamState::AUDIO;
     size_t bytes_to_read = metaint; // starting with the audio data
@@ -203,13 +214,13 @@ static StreamResult handle_metadata(IStream &stream, const std::atomic<bool> &is
 
                 if (bytes_to_read == 0) {
                     state = StreamState::MULTIPLIER;
-                    bytes_to_read = 1;
+                    bytes_to_read = METADATA_LENGTH_BYTE_SIZE;
                 }
                 break;
 
             case StreamState::MULTIPLIER: {
                 const unsigned char k = static_cast<unsigned char>(buffer[0]);
-                const size_t metadata_length = k * 16;
+                const size_t metadata_length = k * METADATA_BLOCK_MULTIPLIER;
 
                 log_message(verbosity, VerbosityLevel::DEBUG,
                             "####DEBUG#### metadata block: k=" + std::to_string(k) + " length=" + std::to_string(
@@ -305,7 +316,7 @@ int main(int argc, char *argv[]) {
         while (is_running) {
             pfd.revents = 0;
 
-            const int ret = poll(&pfd, 1, 100);
+            const int ret = poll(&pfd, 1, POLL_TIMEOUT_MS);
 
             if (ret < 0) {
                 if (errno == EINTR) {
@@ -320,8 +331,7 @@ int main(int argc, char *argv[]) {
 
             // read available data before breaking
             if (pfd.revents & POLLIN) {
-                char buffer[128];
-
+                char buffer[STDIN_BUFFER_SIZE];
                 const ssize_t bytes_read = read(STDIN_FILENO, buffer, sizeof(buffer));
 
                 if (bytes_read < 0) {
@@ -345,7 +355,7 @@ int main(int argc, char *argv[]) {
                     if (window == quit_sequence) {
                         is_running = false;
 
-                        int fd = current_fd.load();
+                        const int fd = current_fd.load();
                         if (fd != -1) {
                             shutdown(fd, SHUT_RDWR);
                         }
@@ -364,7 +374,7 @@ int main(int argc, char *argv[]) {
 
     try {
         config = parse_arguments(argc, argv);
-        if (!parseUrl(config.server_url).has_value()) {
+        if (!parse_url(config.server_url).has_value()) {
             throw std::invalid_argument("invalid URL format: " + config.server_url);
         }
 
@@ -377,11 +387,10 @@ int main(int argc, char *argv[]) {
 
         std::string current_url = config.server_url;
         std::map<std::string, std::string> current_cookies;
-
         std::unique_ptr<IStream> stream;
 
         while (is_running) {
-            auto parsed_opt = parseUrl(current_url);
+            auto parsed_opt = parse_url(current_url);
 
             if (!parsed_opt.has_value()) {
                 throw std::runtime_error("invalid URL format: " + current_url);
@@ -431,17 +440,16 @@ int main(int argc, char *argv[]) {
                 throw std::runtime_error("critical error " + std::to_string(response_data.status_code));
             }
 
-            if (response_data.status_code == 200) {
+            if (response_data.status_code == HTTP_STATUS_OK) {
                 const size_t metaint = config.request_metadata ? response_data.icy_metaint : 0;
-
                 const StreamResult stream_result = listen_to_music(*stream, is_running, metaint, config.verbosity);
+
                 log_message(config.verbosity, VerbosityLevel::DEBUG,
                             "####DEBUG#### listen_to_music result: " + stream_result_to_string(stream_result));
 
                 if (stream_result == StreamResult::TIMEOUT) {
                     stream->close();
                     current_fd = -1;
-
                     current_url = config.server_url;
                     current_cookies.clear();
 
@@ -452,6 +460,7 @@ int main(int argc, char *argv[]) {
                     exit_code = EXIT_SUCCESS;
                     stream->close();
                     current_fd = -1;
+
                     break;
                 }
 
@@ -459,15 +468,17 @@ int main(int argc, char *argv[]) {
                     exit_code = EXIT_SUCCESS;
                     stream->close();
                     current_fd = -1;
+
                     break;
                 }
-            } else if (response_data.status_code >= 300 && response_data.status_code < 400) {
+            } else if (response_data.status_code >= HTTP_STATUS_REDIRECT_MIN && response_data.status_code <= HTTP_STATUS_REDIRECT_MAX) {
                 // redirect
                 if (response_data.new_location.empty()) {
                     throw std::runtime_error("client redirected to nonexistent location");
                 }
 
                 current_url = response_data.new_location;
+
                 log_message(config.verbosity, VerbosityLevel::DEBUG,
                             "####DEBUG#### current_url updated to: " + current_url);
 

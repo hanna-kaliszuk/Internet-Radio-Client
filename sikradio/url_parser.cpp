@@ -1,5 +1,12 @@
 #include "url_parser.h"
 
+namespace {
+    constexpr int MIN_PORT = 1;
+    constexpr int MAX_PORT = 65535;
+    constexpr size_t IPV6_BRACKET_OFFSET = 1;
+    constexpr size_t IPV6_BRACKETS_LENGTH = 2; // "[" and "]"
+}
+
 /**
  * @brief Verifies if the provided port string is a valid numeric port (1-65535).
  * @param port The port candidate string.
@@ -10,7 +17,7 @@ static bool is_valid_port(const std::string &port) {
         return false;
     }
 
-    for (char c: port) {
+    for (const char c: port) {
         if (!std::isdigit(static_cast<unsigned char>(c))) {
             return false;
         }
@@ -20,7 +27,7 @@ static bool is_valid_port(const std::string &port) {
         size_t pos = 0;
         const int value = std::stoi(port, &pos);
 
-        return pos == port.size() && value >= 1 && value <= 65535;
+        return pos == port.size() && value >= MIN_PORT && value <= MAX_PORT;
     } catch (...) {
         return false;
     }
@@ -31,7 +38,7 @@ static bool is_valid_port(const std::string &port) {
  * @param url The raw URL string provided by the user.
  * @return std::optional containing ParsedURL struct on success, nullopt on format failure.
  */
-std::optional<ParsedURL> parseUrl(const std::string &url) {
+std::optional<ParsedURL> parse_url(const std::string &url) {
     ParsedURL result;
 
     size_t offset = 0;
@@ -89,7 +96,7 @@ std::optional<ParsedURL> parseUrl(const std::string &url) {
 
     // if it was raw IPv6 address, strip it off the brackets
     if (!result.hostname.empty() && result.hostname.front() == '[' && result.hostname.back() == ']') {
-        result.hostname = result.hostname.substr(1, result.hostname.size() - 2);
+        result.hostname = result.hostname.substr(IPV6_BRACKET_OFFSET, result.hostname.size() - IPV6_BRACKETS_LENGTH);
     }
 
     // validate if there is even a host

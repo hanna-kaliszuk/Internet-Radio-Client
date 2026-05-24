@@ -1,11 +1,17 @@
 #include "client_config.h"
-#include "logger.h"
 
 #include <unistd.h>
 
 #include <iostream>
 #include <stdexcept>
 #include <string_view>
+
+namespace {
+    constexpr uint32_t MIN_TIMEOUT_MS = 100;
+    constexpr uint32_t MAX_TIMEOUT_MS = 100000;
+    constexpr int MIN_VERBOSITY = 0;
+    constexpr int MAX_VERBOSITY = 4;
+}
 
 /**
  * @brief Prints the program usage instructions to standard error.
@@ -58,7 +64,7 @@ ClientConfig parse_arguments(int argc, char *argv[]) {
                     throw std::invalid_argument("invalid numeric argument for -t");
                 }
 
-                if (t < 100 || t > 100000) {
+                if (t < MIN_TIMEOUT_MS || t > MAX_TIMEOUT_MS) {
                     throw std::invalid_argument("value for -t must be between 100 and 100000");
                 }
 
@@ -86,14 +92,16 @@ ClientConfig parse_arguments(int argc, char *argv[]) {
                 seen_v = true;
                 size_t pos = 0;
                 std::string value = optarg;
-                int v = std::stoi(value, &pos);
+                const int v = std::stoi(value, &pos);
 
                 if (pos != value.size()) {
                     throw std::invalid_argument("invalid numeric argument for -v");
                 }
 
-                if (v < 0 || v > 4) {
-                    throw std::invalid_argument("value for -v must be between 0 and 4");
+                if (v < MIN_VERBOSITY || v > MAX_VERBOSITY) {
+                    throw std::invalid_argument("value for -v must be between " +
+                                                                    std::to_string(MIN_VERBOSITY) + " and " +
+                                                                    std::to_string(MAX_VERBOSITY));
                 }
 
                 config.verbosity = v;
@@ -104,7 +112,7 @@ ClientConfig parse_arguments(int argc, char *argv[]) {
                 if (seen_q)throw std::invalid_argument("parameter '-q' provided multiple times");
 
                 seen_q = true;
-                config.verbosity = static_cast<int>(VerbosityLevel::NONE);
+                config.verbosity = MIN_VERBOSITY;
                 break;
 
             case '?':
