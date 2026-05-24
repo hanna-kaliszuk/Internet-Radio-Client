@@ -234,32 +234,64 @@ int main(int argc, char* argv[]) {
     std::atomic<bool> is_running{true};
 
     std::thread input_thread([&is_running]() {
-            struct pollfd pfd;
-            pfd.fd = STDIN_FILENO; // listen to the standard input
-            pfd.events = POLLIN; // incoming data
+    struct pollfd pfd;
+    pfd.fd = STDIN_FILENO;
+    pfd.events = POLLIN;
 
-            std::string buffer;
+    std::string window;
+    constexpr std::string_view quit_sequence = "quit\n";
 
-            while (is_running) {
-                // check if there is a char. if not, stop waiting after 100ms and check the flag
-                int ret = poll(&pfd, 1, 100);
+    while (is_running) {
+        pfd.revents = 0;
 
-                if (ret > 0 && (pfd.revents & POLLIN)) {
-                    char c;
-                    // read one bit
-                    if (read(STDIN_FILENO, &c, 1) > 0) {
-                        if (c == '\n') {
-                            if (buffer == "quit") {
-                                is_running = false; // start quitting
-                            }
-                            buffer.clear();
-                        } else {
-                            buffer += c;
-                        }
-                    }
+        int ret = poll(&pfd, 1, 100);
+
+        if (ret < 0) {
+            if (errno == EINTR) {
+                continue;
+            }
+            break;
+        }
+
+        if (ret == 0) {
+            continue;
+        }
+
+        if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) {
+            break;
+        }
+
+        if (pfd.revents & POLLIN) {
+            char buffer[128];
+
+            ssize_t bytes_read = read(STDIN_FILENO, buffer, sizeof(buffer));
+
+            if (bytes_read < 0) {
+                if (errno == EINTR || errno == EAGAIN || errno == EWOULDBLOCK) {
+                    continue;
+                }
+                break;
+            }
+
+            if (bytes_read == 0) {
+                break;
+            }
+
+            for (ssize_t i = 0; i < bytes_read; ++i) {
+                window += buffer[i];
+
+                if (window.size() > quit_sequence.size()) {
+                    window.erase(0, window.size() - quit_sequence.size());
+                }
+
+                if (window == quit_sequence) {
+                    is_running = false;
+                    break;
                 }
             }
-        });
+        }
+    }
+});
 
     int exit_code = EXIT_SUCCESS;
     ClientConfig config;
