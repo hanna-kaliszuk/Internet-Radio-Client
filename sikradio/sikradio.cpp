@@ -83,6 +83,12 @@ static StreamResult handle_no_metadata(IStream& stream, std::atomic<bool>& is_ru
         ssize_t bytes_read = stream.read(buffer, sizeof(buffer));
 
         if (bytes_read < 0) {
+            if (!is_running) {
+                log_message(verbosity, VerbosityLevel::COMMON, "client requested shutdown");
+
+                return StreamResult::STOPPED_BY_CLIENT;
+            }
+
             if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
                 // timeout
                 log_message(verbosity, VerbosityLevel::COMMON, "data receiving timeout. trying again.");
@@ -94,6 +100,12 @@ static StreamResult handle_no_metadata(IStream& stream, std::atomic<bool>& is_ru
         }
 
         if (bytes_read == 0) {
+            if (!is_running) {
+                log_message(verbosity, VerbosityLevel::COMMON, "client requested shutdown");
+
+                return StreamResult::STOPPED_BY_CLIENT;
+            }
+
             log_message(verbosity, VerbosityLevel::COMMON, "connection closed by server");
 
             return StreamResult::CLOSED_BY_SERVER;
@@ -126,6 +138,12 @@ static StreamResult handle_metadata(IStream& stream, std::atomic<bool>& is_runni
         ssize_t bytes_read = stream.read(buffer, chunk_size);
 
         if (bytes_read < 0) {
+            if (!is_running) {
+                log_message(verbosity, VerbosityLevel::COMMON, "client requested shutdown");
+
+                return StreamResult::STOPPED_BY_CLIENT;
+            }
+
             if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
                 // tiemout
                 log_message(verbosity, VerbosityLevel::COMMON, "data receiving timeout. trying again.");
@@ -136,6 +154,12 @@ static StreamResult handle_metadata(IStream& stream, std::atomic<bool>& is_runni
             throw std::runtime_error("audio read error");
         }
         if (bytes_read == 0) {
+            if (!is_running) {
+                log_message(verbosity, VerbosityLevel::COMMON, "client requested shutdown");
+
+                return StreamResult::STOPPED_BY_CLIENT;
+            }
+
             log_message(verbosity, VerbosityLevel::COMMON, "connection closed by server");
 
             return StreamResult::CLOSED_BY_SERVER;
@@ -232,8 +256,9 @@ static void initialize_open_ssl() {
 int main(int argc, char* argv[]) {
     initialize_open_ssl();
     std::atomic<bool> is_running{true};
+    std::atomic<int> current_fd{-1};
 
-    std::thread input_thread([&is_running]() {
+    std::thread input_thread([&is_running, &current_fd]() {
     struct pollfd pfd;
     pfd.fd = STDIN_FILENO;
     pfd.events = POLLIN;
@@ -255,10 +280,6 @@ int main(int argc, char* argv[]) {
 
         if (ret == 0) {
             continue;
-        }
-
-        if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) {
-            break;
         }
 
         if (pfd.revents & POLLIN) {
@@ -286,9 +307,17 @@ int main(int argc, char* argv[]) {
 
                 if (window == quit_sequence) {
                     is_running = false;
+
+                    int fd = current_fd.load();
+                    if (fd != -1) {
+                        shutdown(fd, SHUT_RDWR);
+                    }
+
                     break;
                 }
             }
+        } else if (pfd.revents & (POLLHUP | POLLERR | POLLNVAL)) {
+            break;
         }
     }
 });
@@ -331,6 +360,7 @@ int main(int argc, char* argv[]) {
             );
 
             stream = connect_to_server(parsed_url, config);
+            current_fd = stream->get_fd();
 
             send_http_request(*stream, parsed_url, config, build_cookie_header(current_cookies));
 
@@ -339,6 +369,7 @@ int main(int argc, char* argv[]) {
             if (header_result.result == StreamResult::TIMEOUT) {
                 log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### header read result: TIMEOUT");
                 stream->close();
+                current_fd = -1;
                 current_url = config.server_url;
                 current_cookies.clear();
                 continue;
@@ -370,6 +401,7 @@ int main(int argc, char* argv[]) {
 
                 if (stream_result == StreamResult::TIMEOUT) {
                     stream -> close();
+                    current_fd = -1;
 
                     current_url = config.server_url;
                     current_cookies.clear();
@@ -377,7 +409,17 @@ int main(int argc, char* argv[]) {
                     continue;
                 }
 
-                if (stream_result == StreamResult::CLOSED_BY_SERVER || stream_result == StreamResult::STOPPED_BY_CLIENT) {
+                if (stream_result == StreamResult::STOPPED_BY_CLIENT) {
+                    exit_code = EXIT_SUCCESS;
+                    stream->close();
+                    current_fd = -1;
+                    break;
+                }
+
+                if (stream_result == StreamResult::CLOSED_BY_SERVER) {
+                    exit_code = EXIT_SUCCESS;
+                    stream->close();
+                    current_fd = -1;
                     break;
                 }
             } else if (response_data.status_code >= 300 && response_data.status_code < 400) {
@@ -406,9 +448,13 @@ int main(int argc, char* argv[]) {
             }
         }
     } catch (const std::invalid_argument& e) {
-        is_running = false;
-        std::cerr << "ERROR: " << e.what() << std::endl;
-        exit_code = EXIT_FAILURE;
+        if (!is_running) {
+            exit_code = EXIT_SUCCESS;
+        } else {
+            is_running = false;
+            std::cerr << "ERROR: " << e.what() << std::endl;
+            exit_code = EXIT_FAILURE;
+        }
     } catch (const std::exception& e) {
         if (!is_running) {
             exit_code = EXIT_SUCCESS;
@@ -425,6 +471,11 @@ int main(int argc, char* argv[]) {
     }
 
     is_running = false;
+
+    int fd = current_fd.load();
+    if (fd != -1) {
+        shutdown(fd, SHUT_RDWR);
+    }
 
     if (input_thread.joinable()) {
         // wait for the thread to finish
