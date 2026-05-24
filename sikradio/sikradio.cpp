@@ -301,7 +301,11 @@ int main(int argc, char* argv[]) {
                 log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### current_url updated to: " + current_url);
 
                 if (!response_data.cookie.empty()) {
-                    current_cookie = response_data.cookie;
+                    if (!current_cookie.empty()) {
+                        current_cookie += "; ";
+                    }
+
+                    current_cookie += response_data.cookie;
 
                     log_message(config.verbosity, VerbosityLevel::DEBUG, "####DEBUG#### current_cookie updated");
                 }

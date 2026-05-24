@@ -122,30 +122,29 @@ static void handle_redirect(std::istringstream& stream, HttpResponseData& respon
                     continue;
             }
 
-            log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### cookie parsed");
-
+            std::string cookie_value;
             if (semicolon_pos == std::string::npos) {
-                response.cookie = value.substr(first_non_space);
+                cookie_value = value.substr((first_non_space));
             } else {
-                response.cookie = value.substr(first_non_space, semicolon_pos - first_non_space);
+                cookie_value = value.substr(first_non_space, semicolon_pos - first_non_space);
             }
+
+            if (!cookie_value.empty()) {
+                if (!response.cookie.empty()) {
+                    response.cookie += "; ";
+                }
+
+                response.cookie += cookie_value;
+            }
+
+            log_message(verbosity, VerbosityLevel::DEBUG, "####DEBUG#### cookie parsed;")
         }
     }
 }
 
 std::string build_http_request(const ParsedURL& parsed_url, const ClientConfig& config, const std::string& current_cookie) {
     std::string request = "GET " + parsed_url.path + " HTTP/1.1\r\n";
-    std::string host_hdr = parsed_url.hostname;
-
-    if (host_hdr.find(':') != std::string::npos && host_hdr.front() != '[') {
-        host_hdr = "[" + host_hdr + "]";
-    }
-
-    if (!parsed_url.port_str.empty()) {
-        host_hdr += ":" + parsed_url.port_str;
-    }
-
-    request += "Host: " + host_hdr + "\r\n";
+    request += "Host: " + parsed_url.hostname + "\r\n";
     request += "Connection: Keep-Alive\r\n";
 
     if (!current_cookie.empty()) {
