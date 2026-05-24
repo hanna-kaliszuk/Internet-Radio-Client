@@ -135,3 +135,7 @@ void TlsStream::close() {
         socket_fd = -1;
     }
 }
+
+int TlsStream::get_fd() {
+    return socket_fd;
+}

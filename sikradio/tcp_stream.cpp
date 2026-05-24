@@ -22,3 +22,7 @@ void TcpStream::close() {
         socket_fd = -1;
     }
 }
+
+int TcpStream::get_fd() {
+    return socket_fd;
+}

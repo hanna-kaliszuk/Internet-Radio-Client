@@ -19,4 +19,5 @@ public:
     ssize_t read(void* buffer, size_t count) override;
     ssize_t write(const void* buffer, size_t count) override;
     void close() override;
+    int get_fd() const override;
 };

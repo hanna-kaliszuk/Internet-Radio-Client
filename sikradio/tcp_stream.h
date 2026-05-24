@@ -18,4 +18,6 @@ public:
     ssize_t write(const void* buf, size_t count) override;
 
     void close() override;
+
+    int get_fd() const override;
 };
