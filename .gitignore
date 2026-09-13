@@ -1,0 +1,22 @@
+# build artifacts
+*.o 
+*.a 
+*.so 
+
+# executables 
+sikradio 
+
+# IDE
+.idea/ 
+.vscode/ 
+
+# CMake
+cmake-build-*/
+build/ 
+CMakeFiles/ 
+CMakeCache.txt
+cmake_install.cmake
+install_manifest.txt
+
+# macOS
+.DS_store
