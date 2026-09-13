@@ -117,7 +117,7 @@ static StreamResult handle_no_metadata(IStream &stream, const std::atomic<bool> 
 
                 return StreamResult::STOPPED_BY_CLIENT;
             }
-
+            
             if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
                 // timeout
                 log_message(verbosity, VerbosityLevel::COMMON, "data receiving timeout. trying again.");

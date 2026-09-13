@@ -111,15 +111,23 @@ class MockServer:
                 conn, _ = self._sock.accept()
             except OSError:
                 break
-            try:
-                self.handler(conn)
-            finally:
-                try:
-                    conn.close()
-                except OSError:
-                    pass
+            threading.Thread(
+                target=self._handle_one, args=(conn,), daemon=True
+            ).start()
             if not self.reuse:
                 break
+
+    def _handle_one(self, conn):
+        try:
+            self.handler(conn)
+        except OSError:
+            # klient mógł zamknąć połączenie przed odpowiedzią (reconnect / RST)
+            pass
+        finally:
+            try:
+                conn.close()
+            except OSError:
+                pass
 
     def url(self, path="/stream"):
         return f"http://{LOCALHOST}:{self.port}{path}"
@@ -1494,6 +1502,8 @@ class MockServerV6:
             return
         try:
             self.handler(conn)
+        except OSError:
+            pass
         finally:
             try:
                 conn.close()

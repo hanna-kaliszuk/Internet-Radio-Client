@@ -241,7 +241,7 @@ HeaderReadResult server_response_to_text(IStream &stream, const int verbosity) {
 
             return HeaderReadResult{StreamResult::CLOSED_BY_SERVER, ""};
         } else {
-            if (errno == EAGAIN || errno == EWOULDBLOCK) {
+            if (errno == EAGAIN || errno == EWOULDBLOCK || errno == EINTR) {
                 // timeout
                 log_message(verbosity, VerbosityLevel::NON_CRITICAL, "timeout waiting for server response.");
 
