@@ -20,3 +20,8 @@ install_manifest.txt
 
 # macOS
 .DS_store
+
+# testing
+test_logs/
+__pycache__/
+*.pyc 

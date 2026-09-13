@@ -39,6 +39,7 @@ The application receives the raw audio stream and writes it to `stdout`, allowin
 - Configurable logging verbosity
 - Raw audio output suitable for external players
 - Command-line argument parsing, including grouped options
+- Automated unit and integration tests
 
 ---
 
@@ -215,6 +216,36 @@ To remove build artifacts:
 make clean
 ```
 
+To run the automated test suite:
+```bash
+make test
+```
+
+---
+
+## Testing
+
+The project includes an automated test suite covering both core functionality and network behaviour. 
+
+Tests are implemented in Python using the standard `unittest` framework and are located in the `tests/` directory.
+
+The test suite covers, among other things:
+
+- command-line argument parsing,
+- connection and server behaviour,
+- HTTP and ICY responses,
+- timeout handling,
+- reconnection after stalled connections,
+- signal handling and graceful shutdown,
+- IPv4 and IPv6 communication,
+- malformed and edge-case inputs.
+
+Tests can be run using:
+
+```bash
+make test
+```
+
 ---
 
 ## Running
@@ -272,9 +303,13 @@ This makes it possible to pipe the audio directly to another program:
     ├── sikradio_example_5.log
     ├── sikradio_example_6.log
     └── sikradio_example_7.log
+└── tests/
+    └── test_radio.py
 ```
 
 The `examples/` directory contains example files provided by the assignment authors and used as part of the project specification and development process.
+
+The `tests/` directory contains the automated Python test suite used to verify the client's behaviour.
 
 ---
 

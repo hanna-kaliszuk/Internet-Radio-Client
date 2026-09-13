@@ -173,10 +173,20 @@ std::string build_http_request(const ParsedURL &parsed_url, const ClientConfig &
     std::string request = "GET " + parsed_url.path + " HTTP/1.1\r\n";
 
     std::string host_header = parsed_url.hostname;
-    // add brackets for ipv6
-    if (host_header.find(':') != std::string::npos && !(
-            host_header.size() >= 2 && host_header.front() == '[' && host_header.back() == ']')) {
+
+    const bool is_ipv6_literal = host_header.find(':') != std::string::npos;
+    if (is_ipv6_literal) {
         host_header = "[" + host_header + "]";
+    }
+
+    const bool non_default_port =
+            (parsed_url.protocol == Protocol::HTTP &&
+             parsed_url.port_str != DefaultPort::HTTP) ||
+            (parsed_url.protocol == Protocol::HTTPS &&
+             parsed_url.port_str != DefaultPort::HTTPS);
+
+    if (non_default_port) {
+        host_header += ":" + parsed_url.port_str;
     }
 
     request += "Host: " + host_header + "\r\n";
