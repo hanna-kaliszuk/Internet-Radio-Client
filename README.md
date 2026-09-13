@@ -1,5 +1,7 @@
 # Internet Radio Client
 
+[![CI](https://github.com/hanna-kaliszuk/Internet-Radio-Client/actions/workflows/tests.yml/badge.svg)](https://github.com/hanna-kaliszuk/Internet-Radio-Client/actions/workflows/tests.yml)
+
 A command-line Internet radio client implemented in C++ with direct socket communication, IPv4/IPv6 support, HTTP/HTTPS, TLS, streaming audio, and ICY metadata handling.
 
 > Project for **Sieci Komputerowe** (Computer Networks), summer semester 2025/26, University of Warsaw.
