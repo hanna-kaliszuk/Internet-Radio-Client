@@ -1,4 +1,5 @@
 # Internet Radio Client
+[![CI](https://github.com/hanna-kaliszuk/Internet-Radio-Client/actions/workflows/tests.yml/badge.svg)](https://github.com/hanna-kaliszuk/Internet-Radio-Client/actions/workflows/tests.yml)
 
 **A C++20 network client built from the socket layer up.**
 
